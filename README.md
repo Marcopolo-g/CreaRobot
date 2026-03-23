@@ -14,13 +14,13 @@ L'intelligence est entièrement déportée sur un PC externe (ROS 2 / Python 3) 
 │                                                         │
 │  orchestrator_node  →  interaction_node                 │
 │       ↓                      ↓                          │
-│  llm_reactif_node   →   gateway_node  ←── camera_node   │
+│  llm_reactif_node   →   gateway_node  ← camera_node     │
 └──────────────────────────┬──────────────────────────────┘
                            │ WebSocket (rosbridge :9091)
 ┌──────────────────────────┴──────────────────────────────┐
 │                   QTRobot (ROS 1)                       │
 │                                                         │
-│   qt_robot_interface  ·  ears.py  ·  caméra RealSense   │
+│        google SST  ·  ears.py  ·  caméra                │
 └─────────────────────────────────────────────────────────┘
 ```
 
