@@ -1,0 +1,52 @@
+# config.py
+
+# --- Configuration API ---
+OPENAI_API_KEY = "YOUR_API_KEY_HERE"
+
+# --- Paramètres de la voix du robot ---
+VOICE_VOLUME = 70
+VOICE_PITCH = 0
+VOICE_SPEED = 0
+VOICE_LANG = "fr-FR"
+
+# --- Listes des comportements ---
+LISTE_GESTURES = [
+    "adieu", "angry", "begin", "bored", "bored_long", "breathing_exercise", 
+    "bye", "bye-bye", "challenge", "come", "cry", "curious", "ecrit", 
+    "fera_mieux", "grandpa", "handclap", "happy", "head_scratch", "hi", 
+    "hips", "hug", "kiss", "laugh", "no", "ohno", "point_front", 
+    "premiere_recontre", "premiere_rencontre", "protect", "rappel", "sad", 
+    "send_kiss", "show_left", "show_QT", "show_right", "show_tablet", 
+    "sneezing", "so", "so_what", "stretch", "strong", "surprise", 
+    "swipe_left", "swipe_right", "test", "thanks", "up_left", "up_right", 
+    "yawn", "yes"
+]
+
+LISTE_EMOTIONS = [
+    "afraid", "afraidshort", "angry", "blowing_raspberry", "breathing_exercise", 
+    "brushing_teeth", "brushing_teeth_foam", "calmig_down_exercise", 
+    "calming_down", "confused", "cry", "dernieradieu", "dirty_face", 
+    "dirty_face_sad", "dirty_face_wash", "dirty_teeth", "disgusted", "happy", 
+    "happy_blinking", "kiss", "kiss2", "_neutral", "neutral", 
+    "_neutral_state_blinking", "neutral_state_blinking", "one_eye_wink", 
+    "puffin_the_chredo_eeks", "sad", "scream", "showing_smile", "shy", 
+    "surprise", "talking", "talkinglongadapted", "talkinglongrepeat", 
+    "very_neutral", "very_neutral_blinking", "very_sad", "with_a_cold", 
+    "with_a_cold_cleaning_nose", "with_a_cold_sneezing", "yawn"
+]
+
+# --- MÉMOIRE ---
+ENABLE_HISTORY = True # True pour activer, False pour désactiver l'historique
+HISTORY_LIMIT = 5 # Nombre de derniers échanges à retenir
+
+# "google" = STT sur le robot (ears.py actuel)
+# "whisper" = audio brut vers le PC (stt_node.py)
+STT_MODE = "google"
+
+# Intervalle entre chaque photo (en secondes)
+PHOTO_INTERVAL = 60.0 
+SAVE_PATH = "derniere_photo.jpg"
+
+# Paramètres de temps des phases(en secondes)
+TIME_PHASE_2 = 120.0  # 5 min pour le premier dessin
+TIME_PHASE_4 = 130.0  # 5 min pour la suite
