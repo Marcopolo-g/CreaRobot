@@ -4,7 +4,7 @@ import numpy as np
 import base64
 
 # Connexion au robot
-client = roslibpy.Ros(host='192.168.100.1', port=9091)
+client = roslibpy.Ros(host='192.168.100.1', port=9090)
 
 def callback(message):
     try:

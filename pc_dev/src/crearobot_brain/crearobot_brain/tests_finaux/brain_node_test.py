@@ -7,12 +7,12 @@ import json
 import time
 import threading
 
-from . import config
+from .. import config
 
 
 class BrainNode(Node):
     def __init__(self):
-        super().__init__('brain_node')
+        super().__init__('brain_node_test')
         
         openai.api_key = config.OPENAI_API_KEY
 

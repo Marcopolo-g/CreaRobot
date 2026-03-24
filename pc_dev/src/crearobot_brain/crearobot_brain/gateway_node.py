@@ -1,6 +1,6 @@
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import String, Bool
+from std_msgs.msg import String, Bool, UInt8MultiArray
 from sensor_msgs.msg import Image as ROS2Image
 import roslibpy
 import json
@@ -18,10 +18,10 @@ class GatewayNode(Node):
 
         # Connexion au robot
         self.get_logger().info('Tentative de connexion au robot (ROS 1)')
-        self.ros1_client = roslibpy.Ros(host='192.168.100.1', port=9091)
+        self.ros1_client = roslibpy.Ros(host='192.168.100.1', port=9090)
         self.ros1_client.run()
 
-        # Publisher vers ROS 2 (brain_node)
+        # Publisher vers ROS 2 
         self.speech_pub_ros2 = self.create_publisher(String, '/pc/user_speech', 10)
 
         # Publisher "is_talking" vers le robot (pour ears.py)
@@ -57,7 +57,7 @@ class GatewayNode(Node):
         # Configuration automatique du robot dès la connexion établie
         self.ros1_client.on_ready(self.setup_robot_voice)
 
-        # Subscriber ROS 2 : reçoit les actions depuis brain_node
+        # Subscriber ROS 2 : reçoit les actions pour les envoyer au robot
         self.subscription = self.create_subscription(String, '/pc/qtaction', self.listener_callback, 10)
 
     # -------------------------------------------------------
@@ -74,7 +74,7 @@ class GatewayNode(Node):
             ros2_img.header.frame_id = "camera_link"
             ros2_img.height = message['height']
             ros2_img.width = message['width']
-            ros2_img.encoding = message['encoding'] # Souvent 'rgb8'
+            ros2_img.encoding = message['encoding'] 
             ros2_img.is_bigendian = message['is_bigendian']
             ros2_img.step = message['step']
 
@@ -107,10 +107,7 @@ class GatewayNode(Node):
         MODE WHISPER
         Le robot (ears_v2.py) envoie de l'AUDIO BRUT sur /pc/raw_audio (ROS 1).
         La gateway bridge cet audio vers ROS 2 où stt_node.py (Whisper) fait la transcription.
-        Le texte final arrive quand même sur /pc/user_speech mais côté ROS 2 (publié par stt_node).
         """
-
-        from std_msgs.msg import UInt8MultiArray  
         self.pub_audio_ros2 = self.create_publisher(UInt8MultiArray, '/pc/raw_audio', 100)
         self.audio_topic_ros1 = roslibpy.Topic(
             self.ros1_client, '/pc/raw_audio', 'std_msgs/UInt8MultiArray')
@@ -124,8 +121,7 @@ class GatewayNode(Node):
 
     def bridge_text_callback(self, message):
         """MODE GOOGLE — reçoit du texte depuis ROS 1 et le publie en ROS 2"""
-
-        t_received = time.time()  # ← heure d'arrivée depuis le robot
+        t_received = time.time()
         
         ros2_msg = String()
         ros2_msg.data = message['data']
@@ -138,43 +134,10 @@ class GatewayNode(Node):
 
     def bridge_audio_callback(self, message):
         """MODE WHISPER — reçoit de l'audio brut depuis ROS 1 et le publie en ROS 2"""
-        import base64
-        from std_msgs.msg import UInt8MultiArray
-
         msg = UInt8MultiArray()
         raw = base64.b64decode(message['data'])
         msg.data = [int(b) & 0xFF for b in raw]
         self.pub_audio_ros2.publish(msg)
-    
-
-    ''' STT MODES
-
-
-    def _setup_google_mode(self):
-        self.stt_topic_ros1 = roslibpy.Topic(self.ros1_client, '/pc/user_speech', 'std_msgs/String')
-        self.stt_topic_ros1.subscribe(self.bridge_text_callback)
-
-    def _setup_whisper_mode(self):
-        from std_msgs.msg import UInt8MultiArray  
-        self.pub_audio_ros2 = self.create_publisher(UInt8MultiArray, '/pc/raw_audio', 100)
-        self.audio_topic_ros1 = roslibpy.Topic(self.ros1_client, '/pc/raw_audio', 'std_msgs/UInt8MultiArray')
-        self.audio_topic_ros1.subscribe(self.bridge_audio_callback)
-
-    def bridge_text_callback(self, message):
-        ros2_msg = String()
-        ros2_msg.data = message['data']
-        self.speech_pub_ros2.publish(ros2_msg)
-
-    def bridge_audio_callback(self, message):
-        from std_msgs.msg import UInt8MultiArray
-        msg = UInt8MultiArray()
-        raw = base64.b64decode(message['data'])
-        msg.data = [int(b) & 0xFF for b in raw]
-        self.pub_audio_ros2.publish(msg)
-
-    '''
-
-
 
     # -------------------------------------------------------
     # CONFIGURATION AUTOMATIQUE DU ROBOT

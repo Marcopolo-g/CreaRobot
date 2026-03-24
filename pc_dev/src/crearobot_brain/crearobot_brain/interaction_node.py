@@ -2,6 +2,7 @@ import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
 import json
+from . import config
 
 class InteractionNode(Node):
     def __init__(self):
@@ -15,7 +16,9 @@ class InteractionNode(Node):
         
         # --- DÉLÉGATION ---
         # Pour activer/désactiver le LLM Réactif
-        self.llm_ctrl_pub = self.create_publisher(String, '/pc/llm_control', 10)
+        # JE NE VAIS PAS LUTILISER AU FINAL
+        # self.llm_ctrl_pub = self.create_publisher(String, '/pc/llm_control', 10)
+        
         # Pour déclencher la caméra
         self.camera_trigger_pub = self.create_publisher(String, '/pc/camera/trigger', 10)
 
@@ -29,30 +32,45 @@ class InteractionNode(Node):
         elif cmd == "START_PHASE_2":
             # Le robot fait son intro
             self.send_robot("challenge", "happy", "C'est parti ! Complète le dessin sur la feuille.")
-            # On réveille le noeud LLM Réactif
-            self.llm_ctrl_pub.publish(String(data="ACTIVATE_REACTIVE"))
             
         elif cmd == "START_PHASE_3":
-            # On endort le LLM Réactif (pour qu'il ne réponde pas pendant l'analyse)
-            self.llm_ctrl_pub.publish(String(data="DEACTIVATE_REACTIVE"))
-            # On demande la photo
-            self.camera_trigger_pub.publish(String(data="TAKE_PHOTO"))
-            # Le robot réagit
-            self.send_robot("head_scratch", "curious", "Laisse-moi regarder ton dessin... C'est intéressant.")
-            # On pourra appeler le noeud LLM Feedback ici plus tard
+            # On lance la logique spécifique à la condition (C0, C1 ou C2)
+            self.start_phase_3(self)
         
         elif cmd == "START_PHASE_4":
             self.send_robot("challenge", "happy", "C'est parti pour la phase 4 ! Tu peux continuer.")
-            self.llm_ctrl_pub.publish(String(data="ACTIVATE_REACTIVE"))
 
         elif cmd == "START_PHASE_5":
-            self.llm_ctrl_pub.publish(String(data="DEACTIVATE_REACTIVE"))
             self.send_robot("bye", "happy", "On a bien travaillé ! À bientôt !")
 
     def send_robot(self, geste, emotion, texte):
         msg = String()
         msg.data = json.dumps([geste, emotion, texte])
         self.action_pub.publish(msg)
+
+    def start_phase_3(self):
+        if config.CONDITION == "C0":
+            # Envoi direct du texte pré-enregistré
+            self.send_robot("happy", "happy", config.FEEDBACK_C0)
+
+        elif config.CONDITION == "C1":
+            # Le robot dit une petite phrase d'attente
+            self.send_robot("curious", "neutral", "Laisse-moi regarder ton dessin quelques instants...")
+            # Appel au LLM Vision pour générer le feedback personnalisé
+            feedback_custom = self.vision_module.analyze_drawing(config.IMAGE_PATH)
+            # Le robot donne le feedback et ouvre le dialogue
+            self.send_robot("happy", "happy", feedback_custom)
+
+        elif config.CONDITION == "C2":
+            # Petite phrase d'introduction
+            intro = "Oh, j’ai regardé votre dessin et j’ai eu envie d’essayer quelque chose !"
+            self.send_robot("surprise", "happy", intro)
+            # Génération de la complétion (VLM + Image Gen)
+            completion_url = self.vision_module.generate_completion(config.IMAGE_PATH)
+            # Affichage/Projection de l'image (via un topic ROS2 dédié)
+            self.display_image(completion_url)
+            # Phrase de conclusion
+            self.send_robot("hi", "happy", "Maintenant, à vous de continuer !")
 
 def main(args=None):
     rclpy.init(args=args)

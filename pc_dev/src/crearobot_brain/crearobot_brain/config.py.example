@@ -50,3 +50,9 @@ SAVE_PATH = "derniere_photo.jpg"
 # Paramètres de temps des phases(en secondes)
 TIME_PHASE_2 = 120.0  # 5 min pour le premier dessin
 TIME_PHASE_4 = 130.0  # 5 min pour la suite
+
+# Choix de la condition : "C0", "C1" ou "C2"
+CONDITION = "C0"
+
+# Feedback pour condition controle
+FEEDBACK_C0 = "Merci pour votre participation ! J'ai bien vu votre travail durant cette première phase.Vos productions montrent une créativité claire et un bon engagement dans la tâche — j'ai trouvé ça vraiment intéressant à observer. C'est une excellente base pour la suite, continuez comme ça !"

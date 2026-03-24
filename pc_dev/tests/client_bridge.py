@@ -1,8 +1,8 @@
 import roslibpy
 import time
 
-# Connexion au robot via le port 9091 (celui qu'on a ouvert)
-client = roslibpy.Ros(host='192.168.100.1', port=9091)
+# Connexion au robot via le port 9090
+client = roslibpy.Ros(host='192.168.100.1', port=9090)
 client.run()
 
 # Déclaration des services ROS 1 du robot pour ton PC

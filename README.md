@@ -48,19 +48,14 @@ http://192.168.100.2:808
 
 ### Workflow de développement - SSHFS
 
-L'OS du robot est trop ancien pour le Remote SSH de VS Code. On monte le système de fichiers du robot directement en local. Pour cela, crée un dossier `qt_dev` comme suit :
-
-```bash
-mkdir ~/qt_dev
-```
-
-Puis, pour monter le système de fichiers du robot en local :
+L'OS du robot est trop ancien pour le Remote SSH de VS Code. On monte le système de fichiers du robot directement en local :
 
 ```bash
 sshfs qtrobot@192.168.100.1:/home/qtrobot/catkin_ws/src ~/qt_dev
 ```
 
 ---
+
 
 ## Installation
 

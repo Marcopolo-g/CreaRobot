@@ -4,11 +4,11 @@ from sensor_msgs.msg import Image
 import cv2
 import numpy as np
 from cv_bridge import CvBridge 
-from . import config
+from .. import config
 
 class CameraNode(Node):
     def __init__(self):
-        super().__init__('camera_node')
+        super().__init__('camera_node_test')
         
         self.bridge = CvBridge()
         self.latest_msg = None
