@@ -21,6 +21,9 @@ class InteractionNode(Node):
         
         # Pour déclencher la caméra
         self.camera_trigger_pub = self.create_publisher(String, '/pc/camera/trigger', 10)
+        
+        # Pour le feedback ecrit de C1
+        self.vision_feedback_sub = self.create_subscription(String, '/pc/vision/feedback', self.receive_vlm_feedback, 10)
 
     def execute_phase(self, msg):
         cmd = msg.data
@@ -35,7 +38,7 @@ class InteractionNode(Node):
             
         elif cmd == "START_PHASE_3":
             # On lance la logique spécifique à la condition (C0, C1 ou C2)
-            self.start_phase_3(self)
+            self.start_phase_3()
         
         elif cmd == "START_PHASE_4":
             self.send_robot("challenge", "happy", "C'est parti pour la phase 4 ! Tu peux continuer.")
@@ -54,12 +57,12 @@ class InteractionNode(Node):
             self.send_robot("happy", "happy", config.FEEDBACK_C0)
 
         elif config.CONDITION == "C1":
-            # Le robot dit une petite phrase d'attente
             self.send_robot("curious", "neutral", "Laisse-moi regarder ton dessin quelques instants...")
-            # Appel au LLM Vision pour générer le feedback personnalisé
-            feedback_custom = self.vision_module.analyze_drawing(config.IMAGE_PATH)
-            # Le robot donne le feedback et ouvre le dialogue
-            self.send_robot("happy", "happy", feedback_custom)
+            # On demande au VisionNode de travailler
+            trigger_msg = String()
+            trigger_msg.data = "ANALYZE_C1"
+            self.camera_trigger_pub.publish(trigger_msg)
+
 
         elif config.CONDITION == "C2":
             # Petite phrase d'introduction
@@ -71,6 +74,11 @@ class InteractionNode(Node):
             self.display_image(completion_url)
             # Phrase de conclusion
             self.send_robot("hi", "happy", "Maintenant, à vous de continuer !")
+
+    # Callback pour C1
+    def receive_vlm_feedback(self, msg):
+        # Dès que le VisionNode a fini, on fait parler le robot
+        self.send_robot("happy", "happy", msg.data)
 
 def main(args=None):
     rclpy.init(args=args)
