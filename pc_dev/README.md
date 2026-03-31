@@ -1,85 +1,3 @@
-### 2. Côté PC - ROS 2
-
-```bash
-# Gateway (pont ROS 1 ↔ ROS 2)
-ros2 run crearobot_brain gateway
-
-# Orchestrateur de l'expérience
-ros2 run crearobot_brain orchestrator
-
-# Interaction : Gère les phases, activation des nodes 
-ros2 run crearobot_brain interaction_node
-
-# Cerveau LLM réactif
-ros2 run crearobot_brain llm_reactif_node
-```
-
----
-
-## Fonctionnalités clés
-
-### Synchronisation parfaite (lipsync)
-
-La classe `TaskSynchronizer` (basée sur `asyncio`) déclenche simultanément :
-
-- le geste (ROS Service)
-- l'expression faciale (ROS Service)
-- la parole (TTS)
-
-Un correctif dynamique soustrait le temps de chargement de l'émotion à la durée d'animation de la bouche pour éviter qu'elle ne bouge dans le vide après la fin de la parole.
-
-### Vision & perception
-
-Le `camera_node` récupère le flux vidéo via la Gateway avec deux optimisations :
-
-- **Throttling** : 1 image toutes les 2 à 5 secondes pour ne pas saturer le WiFi
-- **Queue management** : `queue_length=1` pour garantir que le LLM analyse toujours l'image la plus récente, sans lag cumulatif
-
-### Intelligence artificielle - LLM
-
-- **Format de sortie** : l'IA répond exclusivement en JSON `["geste", "emotion", "texte"]`
-- **Prompt système** : injection des listes fermées `LISTE_GESTES` et `LISTE_EMOTIONS` issues de `config.py` pour donner les gestes et émotions déjà implémentés dans QT.
-- **Warm-up** : micro-requête au démarrage pour éliminer le cold start (latence initiale de ~6s réduite à < 2s)
-
-### Micro - réglage AGC (ReSpeaker 4 Mic Array)
-
-```bash
-python /home/qtrobot/robot/code/tutorials/examples/voice_activity/tuning.py AGCONOFF 1
-python /home/qtrobot/robot/code/tutorials/examples/voice_activity/tuning.py AGCMAXGAIN 100
-python /home/qtrobot/robot/code/tutorials/examples/voice_activity/tuning.py AGCDESIREDLEVEL 0.1
-```
-
-> Ces réglages sont non persistants et sont réappliqués automatiquement au lancement de `ears.py`.
-
----
-
-## Tests et démos
-
-| Fichier | Description |
-|---|---|
-| `demo_interaction.py` | Test simple parole + geste |
-| `test_vision.py` | Capture et enregistrement d'une photo `.jpg` |
-| `test_gpt.py` | Validation du format JSON et du respect des listes de gestes |
-| `test_vision_rt.py` | Affichage du flux vidéo distant en temps réel sur le PC |
-
----
-
-## Sources
-
-- [Documentation officielle QTrobot](https://docs.luxai.com/docs/intro_code)
-- [Wiki ROS QTrobot](https://wiki.ros.org/Robots/qtrobot)
-- [Tutoriel Vosk / Python](https://docs.luxai.com/docs/tutorials/python/python_ros_vosk)
-- [Documentation micro ReSpeaker](https://docs.luxai.com/docs/v1/modules/microphone)
-
----
-
-*Développé par Marco G.*
-
-
-
-
-
-
 # Projet Hyppolite — Orchestration TCT-DP & IA Générative
 
 > QTrobot V1 (ROS 1 Kinetic) transformé en compagnon social intelligent. L'intelligence, la vision et l'audition sont déportées sur PC (ROS 2) pour une réactivité maximale.
@@ -93,13 +11,15 @@ Pour garantir une interaction fluide, tous les capteurs (micro, caméra) sont br
 ```
 ┌────────────────────────────────────────────────────────────────┐
 │                          PC (ROS 2)                            │
-│                                                                │
-│  [Micro USB]   →  stt_node (Google) ──────┐                    │
-│                                           ↓                    │
-│  [Caméra USB]  →  camera_node ───────→ brain_node →[Projecteur]│
-│                                           │                    │
-│                                           ↓                    │
-│  [HP externes] ← gateway_node ←── interaction_node             │
+│  orchestator_node                                              │
+|         ↓                                                      │
+│ interaction_node → vision_node  ←  [Caméra USB]                |
+|   ↓              → stt_node     ←  [Micro USB]                 |     
+|                  → projection_node                             | 
+|                  → llm_node                                    |
+|                                                                |
+|                         ↓↑                                     |
+│                    gateway_node                                │
 └──────────────────────────┬─────────────────────────────────────┘
                            │ WebSocket (rosbridge :9090)
 ┌──────────────────────────┴─────────────────────────────────────┐
