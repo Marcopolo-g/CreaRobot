@@ -14,7 +14,7 @@ Pour garantir une interaction fluide, tous les capteurs (micro, caméra) sont br
 │  orchestator_node                                              │
 |         ↓                                                      │
 │ interaction_node → vision_node  ←  [Caméra USB]                |
-|   ↓              → stt_node     ←  [Micro USB]                 |     
+|                  → stt_node     ←  [Micro USB]                 |     
 |                  → projection_node                             | 
 |                  → llm_node                                    |
 |                                                                |
@@ -34,8 +34,8 @@ Pour garantir une interaction fluide, tous les capteurs (micro, caméra) sont br
 | Logique | `orchestrator_node` | Machine à états — 5 phases TCT-DP |
 | Dispatcher | `interaction_node` | Traduit les phases en actions et en gestes / émotions / paroles |
 | Audition | `stt_node` | Capture micro local + Google STT |
-| Vision | `camera_node` | Flux local via caméra USB externe |
-| Cognition | `llm_reactif_node` | Chef d'orchestre : analyse le texte, choisit les actions et les images |
+| Vision | `vision_node` | Flux local via caméra USB externe |
+| Cognition | `llm_node` | Chef d'orchestre : analyse le texte, choisit les actions et les images |
 | Projection | `projection_node` | Affiche les visuels sur le projecteur HDMI |
 | Passerelle | `gateway_node` | Bridge bi-directionnel ROS 1 ↔ ROS 2 |
 

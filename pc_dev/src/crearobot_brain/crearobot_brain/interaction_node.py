@@ -30,7 +30,7 @@ class InteractionNode(Node):
         self.get_logger().info(f"Réception commande : {cmd}")
 
         if cmd == "START_PHASE_1":
-            self.send_robot("hi", "happy", "Bonjour ! Je suis QTRobot. On va dessiner ensemble. Es-tu prêt ?")
+            self.send_robot("hi", "happy", "Bonjour ! On va dessiner ensemble. Es-tu prêt ?")
             
         elif cmd == "START_PHASE_2":
             # Le robot fait son intro

@@ -2,125 +2,104 @@ import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
 from sensor_msgs.msg import Image
-import cv2
-import numpy as np
 from cv_bridge import CvBridge
+import cv2
 import base64
 import openai
 import os
-import json
-
 from . import config
 
 class VisionNode(Node):
     def __init__(self):
         super().__init__('vision_node')
-        
-        # Initialisation
-        self.bridge = CvBridge()
-        self.latest_frame = None
         openai.api_key = config.OPENAI_API_KEY
+        self.bridge = CvBridge()
         
-        # --- SUBSCRIPTIONS ---
-        # On récupère le flux d'images de la Gateway
-        self.image_sub = self.create_subscription(Image, '/pc/camera/image', self.image_callback, 1)
+        # --- CONFIGURATION CAMÉRA ---
+        # 0 est l'index par défaut de la webcam PC
+        self.cap = cv2.VideoCapture(0)
+        if not self.cap.isOpened():
+            self.get_logger().error("Impossible d'ouvrir la caméra !")
         
-        # On écoute le signal de l'InteractionNode
+        self.latest_frame = None
+
+        # --- PUBLISHERS / SUBSCRIPTIONS ---
+        # On publie quand même le flux pour pouvoir voir ce que le robot voit (debug)
+        self.image_pub = self.create_publisher(Image, '/image_raw', 10)
+        
+        # On écoute le trigger
         self.trigger_sub = self.create_subscription(String, '/pc/camera/trigger', self.handle_trigger, 10)
         
-        # --- PUBLISHERS ---
-        # On renvoie le feedback textuel final
+        # Publisher pour le feedback de l'IA
         self.feedback_pub = self.create_publisher(String, '/pc/vision/feedback', 10)
-        
-        self.get_logger().info("--- VISION NODE READY (Capture + Analyse C1) ---")
 
-    def image_callback(self, msg):
-        """ Stocke en continu la dernière image reçue du robot """
-        self.latest_frame = msg
+        # --- TIMERS ---
+        # Boucle de capture à 20 FPS pour garder l'image "fraîche"
+        self.timer = self.create_timer(0.05, self.capture_loop)
+        
+        self.get_logger().info("Vision Node (OpenCV Direct) prêt !")
+
+    def capture_loop(self):
+        """ Lit la caméra en continu et publie pour le debug """
+        ret, frame = self.cap.read()
+        if ret:
+            self.latest_frame = frame
+            # On publie en ROS2 pour pouvoir utiliser rqt_image_view
+            msg = self.bridge.cv2_to_imgmsg(frame, encoding="bgr8")
+            self.image_pub.publish(msg)
 
     def handle_trigger(self, msg):
-        """ Se déclenche quand l'InteractionNode dit 'ANALYZE_C1' """
         if msg.data == "ANALYZE_C1":
             if self.latest_frame is None:
-                self.get_logger().warn("Trigger reçu mais aucune image en mémoire !")
+                self.get_logger().warn("Trigger reçu mais pas d'image en mémoire !")
                 return
             
-            self.get_logger().info("Capture et Analyse en cours...")
-            self.process_vision_sequence()
+            self.get_logger().info("Analyse du dessin demandée...")
+            self.process_with_ai()
 
-    def process_vision_sequence(self):
-        """ Séquence complète : Save -> Encode -> API -> Publish """
+    def process_with_ai(self):
         try:
-            # Conversion et Sauvegarde de la photo
-            # On utilise bgr8 car OpenCV écrit en BGR par défaut
-            cv_image = self.bridge.imgmsg_to_cv2(self.latest_frame, desired_encoding='bgr8')
-            filename = config.IMAGE_PATH
-            cv2.imwrite(filename, cv_image)
-            self.get_logger().info(f"Image sauvegardée sous : {filename}")
-
-            # Encodage en Base64
-            base64_image = self.encode_image(filename)
+            # Sauvegarde locale
+            path = os.path.expanduser("~/Desktop/CreaRobot/last_capture.jpg")
+            cv2.imwrite(path, self.latest_frame)
             
-            # Analyse VLM
-            self.run_vlm_analysis(base64_image)
-
-        except Exception as e:
-            self.get_logger().error(f"Erreur dans la séquence de vision : {e}")
-
-    def encode_image(self, image_path):
-        """ Prépare l'image pour l'API OpenAI """
-        with open(image_path, "rb") as image_file:
-            return base64.b64encode(image_file.read()).decode('utf-8')
-
-    def run_vlm_analysis(self, base64_image):
-        """ Envoie l'image à GPT-4o avec le prompt spécifique C1 """
-        
-        # Prompt Hyppolite pour la Condition 1, A MODIFIER
-        prompt_c1 = """
-        Tu es Hyppolite, un robot social amical et curieux qui aide les enfants à dessiner.
-        Regarde ce dessin réalisé par l'enfant. Analyse-le en ignorant les éléments extérieurs (mains, table).
-        
-        Génère une réponse courte (30-40 mots maximum) :
-        1. Identifie un élément précis (une couleur vive, une forme, un personnage).
-        2. Donne un compliment sincère sur la créativité.
-        3. Pose une question ouverte simple pour que l'enfant t'explique son dessin.
-        
-        Ta réponse doit être chaleureuse et utiliser un langage adapté à un enfant.
-        """
-
-        try:
+            # Encodage Base64
+            _, buffer = cv2.imencode('.jpg', self.latest_frame)
+            base64_img = base64.b64encode(buffer).decode('utf-8')
+            
+            # Prompt et Appel GPT-4o-mini
+            prompt = "Tu es Hyppolite, un robot ami des enfants. Commente brièvement ce dessin et pose une question."
+            
             response = openai.ChatCompletion.create(
-                model="gpt-4o",
-                messages=[
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": prompt_c1},
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:image/jpeg;base64,{base64_image}"
-                                },
-                            },
-                        ],
-                    }
-                ],
-                max_tokens=150,
+                model="gpt-4o-mini",
+                messages=[{
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_img}"}}
+                    ]
+                }],
+                max_tokens=80
             )
-
-            feedback_text = response.choices[0].message.content
-            self.get_logger().info(f"Analyse réussie : {feedback_text}")
-
-            # Publication pour l'InteractionNode
+            
+            feedback = response.choices[0].message.content
+            self.get_logger().info(f"IA : {feedback}")
+            
+            # Publication du résultat
             res_msg = String()
-            res_msg.data = feedback_text
+            res_msg.data = feedback
             self.feedback_pub.publish(res_msg)
 
         except Exception as e:
-            self.get_logger().error(f"Erreur API OpenAI : {e}")
+            self.get_logger().error(f"Erreur Vision/IA : {e}")
 
-def main(args=None):
-    rclpy.init(args=args)
+    def __del__(self):
+        # Libère la caméra proprement quand on arrête le node
+        if self.cap.isOpened():
+            self.cap.release()
+
+def main():
+    rclpy.init()
     node = VisionNode()
     try:
         rclpy.spin(node)

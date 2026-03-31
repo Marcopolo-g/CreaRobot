@@ -35,7 +35,7 @@ class GatewayNode(Node):
         # Subscriber ROS 2 : reçoit les ordres d'action (depuis brain_node)
         self.subscription = self.create_subscription(String, '/pc/qtaction', self.listener_callback, 10)
 
-        self.get_logger().info("✅ Gateway Simplifiée (Commandes uniquement) Active")
+        self.get_logger().info("Gateway Active")
 
     def setup_robot_voice(self):
         """ Configure la langue et le volume du robot au démarrage """
