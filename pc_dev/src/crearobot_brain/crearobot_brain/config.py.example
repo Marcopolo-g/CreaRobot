@@ -39,10 +39,6 @@ LISTE_EMOTIONS = [
 ENABLE_HISTORY = True # True pour activer, False pour désactiver l'historique
 HISTORY_LIMIT = 5 # Nombre de derniers échanges à retenir
 
-# "google" = STT sur le robot (ears.py actuel)
-# "whisper" = audio brut vers le PC (stt_node.py)
-STT_MODE = "google"
-
 # Intervalle entre chaque photo (en secondes)
 PHOTO_INTERVAL = 60.0 
 SAVE_PATH = "derniere_photo.jpg"

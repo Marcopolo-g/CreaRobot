@@ -28,6 +28,8 @@ setup(
             'interaction = crearobot_brain.interaction_node:main',
             'llm_reactif_node = crearobot_brain.llm_reactif_node:main',
             'gateway = crearobot_brain.gateway_node:main',
+            'projection = crearobot_brain.projection_node:main',
+            'image_publisher = crearobot_brain.image_test_publisher:main'
             'vision = crearobot_brain.vision_node:main',
             'gateway_test = crearobot_brain.tests_finaux.gateway_node_test:main',
             'brain_test = crearobot_brain.tests_finaux.brain_node_test:main',

@@ -1,94 +1,87 @@
-# stt_node.py
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import String
-from faster_whisper import WhisperModel
+from std_msgs.msg import String, UInt8MultiArray
 import numpy as np
-from std_msgs.msg import UInt8MultiArray 
-
+import speech_recognition as sr
+import io
+import wave
 
 class STTNode(Node):
     def __init__(self):
         super().__init__('stt_node')
         
-        # Modèle Whisper local (tiny = rapide, base = plus précis ou small)
-        self.get_logger().info("Chargement du modèle Whisper...")
-        self.model = WhisperModel("small", device="cpu", compute_type="int8")
-        self.get_logger().info("Modèle prêt !")
+        # Initialisation du reconnaisseur
+        self.recognizer = sr.Recognizer()
+        self.get_logger().info("Google STT prêt !")
 
-        # Buffer audio
         self.audio_buffer = []
         self.is_recording = False
         self.silence_counter = 0
-        self.SILENCE_LIMIT = 20   # ~20 chunks = ~0.4s de silence avant de couper
-        self.MIN_AUDIO_LENGTH = 10  # Minimum de chunks pour éviter les faux positifs
-        self.ENERGY_THRESHOLD = 400  # Seuil de détection de voix
+        self.SILENCE_LIMIT = 15    # ~0.3s
+        self.ENERGY_THRESHOLD = 200 # À ajuster selon les logs d'énergie
 
-        # Subscriber : reçoit l'audio brut depuis la gateway (qui le bridge depuis le robot)
         self.sub_audio = self.create_subscription(UInt8MultiArray, '/pc/raw_audio', self.audio_callback, 100)
-
-        # Publisher : envoie le texte reconnu vers brain_node
         self.pub_text = self.create_publisher(String, '/pc/user_speech', 10)
 
-        self.get_logger().info("STT Node prêt, en écoute sur /pc/raw_audio")
-
-
     def audio_callback(self, msg):
-        # 1. Conversion des octets reçus en entiers
-        audio_bytes = bytes(msg.data)
-        raw_data = np.frombuffer(audio_bytes, dtype=np.int16)
-
-        # 2. Séparation des 6 canaux (Reshape)
-        # On transforme le vecteur plat en une matrice [Nombre_de_frames, 6]
-        try:
-            audio_matrix = raw_data.reshape(-1, 6)
-            # On ne garde que le canal 0 (le micro de devant)
-            audio_chunk = audio_matrix[:, 0]
-        except Exception as e:
-            # Si le buffer est mal coupé, on ignore ce chunk pour éviter le crash
-            return
-
-        # 3. Calcul de l'énergie sur le canal 0 uniquement
+        audio_chunk = np.frombuffer(bytes(msg.data), dtype=np.int16)
         energy = np.abs(audio_chunk).mean()
+        
 
         if energy > self.ENERGY_THRESHOLD:
             if not self.is_recording:
-                self.get_logger().info("Voix détectée sur Canal 0, enregistrement...")
+                self.get_logger().info("Écoute (Google)...")
                 self.is_recording = True
-            # On ajoute le canal 0 au buffer (pas les 6 !)
-            self.audio_buffer.extend(audio_chunk.tolist())
+            self.audio_buffer.extend(bytes(msg.data))
             self.silence_counter = 0
-
         elif self.is_recording:
-            self.audio_buffer.extend(audio_chunk.tolist())
+            self.audio_buffer.extend(bytes(msg.data))
             self.silence_counter += 1
-            
             if self.silence_counter >= self.SILENCE_LIMIT:
-                if len(self.audio_buffer) > self.MIN_AUDIO_LENGTH * 1024:
-                    self.transcribe()
+                self.transcribe_free_google()
                 self.audio_buffer = []
                 self.is_recording = False
                 self.silence_counter = 0
 
-    def transcribe(self):
-        self.get_logger().info(" Transcription en cours (Whisper)...") # Ajoute ça
-        audio_np = np.array(self.audio_buffer, dtype=np.float32) / 32768.0
+    def transcribe_free_google(self):
+        self.get_logger().info("Envoi à Google STT...")
         
-        segments, _ = self.model.transcribe(
-            audio_np,
-            language="fr",
-            beam_size=1
-        )
+        # Conversion du buffer en objet AudioData pour speech_recognition
+        raw_data = bytes(self.audio_buffer)
+
+        with open("debug_audio.wav", "wb") as f:
+            with wave.open(f, 'wb') as wf:
+                wf.setnchannels(1)
+                wf.setsampwidth(2)
+                wf.setframerate(16000)
+                wf.writeframes(raw_data)
+        self.get_logger().info("Fichier debug_audio.wav enregistré. Écoute-le !")
         
-        text = " ".join([seg.text for seg in segments]).strip()
-        
-        if text:
-            self.get_logger().info(f" RECONNU : '{text}'") # Ce log s'affichera dans ton terminal de run
+        # On crée un faux fichier WAV en mémoire pour que Google comprenne le format
+        with io.BytesIO() as wav_file:
+            with wave.open(wav_file, 'wb') as wf:
+                wf.setnchannels(1)
+                wf.setsampwidth(2) # 16-bit
+                wf.setframerate(16000)
+                wf.writeframes(raw_data)
+            wav_file.seek(0)
+            
+            with sr.AudioFile(wav_file) as source:
+                audio_data = self.recognizer.record(source)
+
+        try:
+            # L'API magique sans clé
+            text = self.recognizer.recognize_google(audio_data, language="fr-FR")
+            self.get_logger().info(f"RECONNU : '{text}'")
+            
             msg = String()
             msg.data = text
             self.pub_text.publish(msg)
-        else:
-            self.get_logger().info(" Transcription terminée, mais aucun texte détecté.")
+            
+        except sr.UnknownValueError:
+            self.get_logger().info("Google n'a pas compris l'audio.")
+        except sr.RequestError as e:
+            self.get_logger().error(f"Erreur réseau Google STT : {e}")
 
 def main(args=None):
     rclpy.init(args=args)
