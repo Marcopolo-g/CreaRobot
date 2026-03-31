@@ -63,7 +63,6 @@ class InteractionNode(Node):
             trigger_msg.data = "ANALYZE_C1"
             self.camera_trigger_pub.publish(trigger_msg)
 
-
         elif config.CONDITION == "C2":
             # Petite phrase d'introduction
             intro = "Oh, j’ai regardé votre dessin et j’ai eu envie d’essayer quelque chose !"

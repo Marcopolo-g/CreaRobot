@@ -14,7 +14,7 @@ Pour garantir une interaction fluide, tous les capteurs (micro, caméra) sont br
 │  orchestator_node                                              │
 |         ↓                                                      │
 │ interaction_node → vision_node  ←  [Caméra USB]                |
-|   ↓              → stt_node     ←  [Micro USB]                 |     
+|                  → stt_node     ←  [Micro USB]                 |     
 |                  → projection_node                             | 
 |                  → llm_node                                    |
 |                                                                |
@@ -34,8 +34,8 @@ Pour garantir une interaction fluide, tous les capteurs (micro, caméra) sont br
 | Logique | `orchestrator_node` | Machine à états — 5 phases TCT-DP |
 | Dispatcher | `interaction_node` | Traduit les phases en actions et en gestes / émotions / paroles |
 | Audition | `stt_node` | Capture micro local + Google STT |
-| Vision | `camera_node` | Flux local via caméra USB externe |
-| Cognition | `llm_reactif_node` | Chef d'orchestre : analyse le texte, choisit les actions et les images |
+| Vision | `vision_node` | Flux local via caméra USB externe |
+| Cognition | `llm_node` | Chef d'orchestre : analyse le texte, choisit les actions et les images |
 | Projection | `projection_node` | Affiche les visuels sur le projecteur HDMI |
 | Passerelle | `gateway_node` | Bridge bi-directionnel ROS 1 ↔ ROS 2 |
 
@@ -69,9 +69,6 @@ sftp://qtrobot@192.168.100.1/
 ### Sur le PC - ROS 2 Humble / Python 3.10
 
 ```bash
-# Dépendances système
-sudo apt install fonts-dejavu fontconfig
-
 # Python
 pip install roslibpy openai==0.28 rclpy opencv-python numpy SpeechRecognition PyAudio
 ```
@@ -84,14 +81,35 @@ Activer dans l'autostart ros_bridge et motor :
 - *start_qt_rosbridge.sh*
 - *start_qt_motor.sh*
 
-### 2. Côté PC -ROS 2
+### 2. Côté PC - ROS 2
+
+#### Première méthode de lancement
+
+L'expérience se lance désormais en deux temps pour garantir que l'utilisateur garde le contrôle clavier sur l'orchestration.
+
+Terminal 1 : Lancement de l'infrastructure (Launch File)
 
 ```bash
-# Orchestrateur de l'expérience
-ros2 run crearobot_brain orchestrator
+# Ce fichier lance la Gateway, la Vision (OpenCV), le STT, la Projection et le nœud d'Interaction.
+ros2 launch crearobot_brain hyppolite_launch.py
+```
 
+Terminal 2 : Pilote de l'expérience
+
+```bash
+# À lancer une fois que le Terminal 1 affiche "ROBOT PRÊT". Ce terminal permet de taper "oui", "fini" pour changer de phase.
+ros2 run crearobot_brain orchestrator
+```
+
+#### Seconde méthode de lancement 
+Lancer tous les noeuds indépendemment :
+
+```bash
 # Interaction : Gère les phases, activation des nodes 
 ros2 run crearobot_brain interaction_node
+
+# Orchestrateur de l'expérience
+ros2 run crearobot_brain orchestrator
 
 # Cerveau LLM réactif
 ros2 run crearobot_brain llm_reactif_node
