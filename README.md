@@ -13,10 +13,10 @@ Pour garantir une interaction fluide, tous les capteurs (micro, caméra) sont br
 │                          PC (ROS 2)                            │
 │  orchestator_node                                              │
 |         ↓                                                      │
-│ interaction_node → vision_node  ←  [Caméra USB]                |
-|                  → stt_node     ←  [Micro USB]                 |     
-|                  → projection_node                             | 
-|                  → llm_node                                    |
+│ interaction_node → vision_node      ←  [Caméra USB]            |
+|                  → stt_node         ←  [Micro USB]             |     
+|                  → projection_node  ←  [Projecteur HDMI]       | 
+|                  → brain_node       ←  [ChatGPT]               |
 |                                                                |
 |                         ↓↑                                     |
 │                    gateway_node                                │
@@ -35,8 +35,8 @@ Pour garantir une interaction fluide, tous les capteurs (micro, caméra) sont br
 | Dispatcher | `interaction_node` | Traduit les phases en actions et en gestes / émotions / paroles |
 | Audition | `stt_node` | Capture micro local + Google STT |
 | Vision | `vision_node` | Flux local via caméra USB externe |
-| Cognition | `llm_node` | Chef d'orchestre : analyse le texte, choisit les actions et les images |
-| Projection | `projection_node` | Affiche les visuels sur le projecteur HDMI |
+| Cognition | `brain_node` | llm : analyse le texte et image, choisit les actions et les images |
+| Projection | `projection_node` | Affiche le visuel du dessin sur le projecteur HDMI |
 | Passerelle | `gateway_node` | Bridge bi-directionnel ROS 1 ↔ ROS 2 |
 
 ---
@@ -70,8 +70,9 @@ sftp://qtrobot@192.168.100.1/
 
 ```bash
 # Python
-pip install roslibpy openai==0.28 rclpy opencv-python numpy SpeechRecognition PyAudio
+pip install roslibpy openai==0.28 rclpy opencv-python numpy SpeechRecognition PyAudio 
 ```
+It is necesary that your microphone is the default one
 
 ## Mise en route
 
@@ -90,8 +91,8 @@ L'expérience se lance désormais en deux temps pour garantir que l'utilisateur 
 Terminal 1 : Lancement de l'infrastructure (Launch File)
 
 ```bash
-# Ce fichier lance la Gateway, la Vision (OpenCV), le STT, la Projection et le nœud d'Interaction.
-ros2 launch crearobot_brain hyppolite_launch.py
+# Ce fichier lance la Gateway, la Vision (OpenCV), le STT, la Projection, le Brain et le nœud d'Interaction.
+ros2 launch crearobot_brain launch.py
 ```
 
 Terminal 2 : Pilote de l'expérience
@@ -106,13 +107,13 @@ Lancer tous les noeuds indépendemment :
 
 ```bash
 # Interaction : Gère les phases, activation des nodes 
-ros2 run crearobot_brain interaction_node
+ros2 run crearobot_brain interaction
 
 # Orchestrateur de l'expérience
 ros2 run crearobot_brain orchestrator
 
 # Cerveau LLM réactif
-ros2 run crearobot_brain llm_reactif_node
+ros2 run crearobot_brain brain
 
 # La passerelle de commande
 ros2 run crearobot_brain gateway
@@ -124,7 +125,7 @@ ros2 run crearobot_brain projection
 ros2 run crearobot_brain stt
 
 # La vision (caméra locale)
-ros2 run v4l2_camera v4l2_camera_node
+ros2 run crearobot_brain vision
 ```
 
 ---
@@ -148,6 +149,7 @@ Le `camera_node` récupère un flux local à 60 FPS sans saturer le WiFi. Le `pr
 ### Audition déportée - STT
 
 L'utilisation d'un micro cravate via `SpeechRecognition` (Google API) élimine les problèmes de gain du ReSpeaker. Un calcul d'énergie détecte la voix et n'envoie que les segments utiles au cloud, réduisant la latence à moins de 1s.
+Pour garantir une interaction cohérente, le nœud d'audition n'est plus en "écoute libre" permanente. Il est désormais piloté par le topic /pc/stt/enable (Bool).
 
 ### Intelligence artificielle — LLM
 
