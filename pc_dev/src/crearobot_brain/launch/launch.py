@@ -1,6 +1,7 @@
 from launch import LaunchDescription
 from launch_ros.actions import Node
 from launch.actions import TimerAction
+from crearobot_brain import config
 
 def generate_launch_description():
     
@@ -44,10 +45,17 @@ def generate_launch_description():
         output='screen'
     )
 
-    return LaunchDescription([
-        gateway,
-        projection,
-        vision,
-        stt,
-        interaction,
-    ])
+    # Brain (Dialogue sur le dessin avec le sujet)
+    brain = Node(
+        package='crearobot_brain',
+        executable='brain',
+        name='brain_node',
+        output='screen'
+    )
+
+    nodes_to_run = [gateway, vision, stt, interaction, brain]
+
+    if config.CONDITION == "C2":
+        nodes_to_run.append(projection)
+
+    return LaunchDescription(nodes_to_run)

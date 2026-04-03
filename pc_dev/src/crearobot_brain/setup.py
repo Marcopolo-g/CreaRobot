@@ -22,7 +22,7 @@ setup(
         'console_scripts': [
             'orchestrator = crearobot_brain.orchestrator_node:main',
             'interaction = crearobot_brain.interaction_node:main',
-            'llm_reactif_node = crearobot_brain.llm_reactif_node:main',
+            'brain = crearobot_brain.brain_node:main',
             'gateway = crearobot_brain.gateway_node:main',
             'projection = crearobot_brain.projection_node:main',
             'vision = crearobot_brain.vision_node:main',

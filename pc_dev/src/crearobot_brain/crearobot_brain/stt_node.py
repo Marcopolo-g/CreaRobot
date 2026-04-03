@@ -1,90 +1,88 @@
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import String, UInt8MultiArray
-import numpy as np
+from std_msgs.msg import String
 import speech_recognition as sr
-import io
-import wave
+import threading
+import os
+from std_msgs.msg import Bool, String
+import time
+
+os.environ['AS_SILENCE_ALSA'] = '1'
 
 class STTNode(Node):
     def __init__(self):
         super().__init__('stt_node')
-        
-        # Initialisation du reconnaisseur
+        self.pub = self.create_publisher(String, '/pc/stt/transcript', 10)
+
+        # Le STT est désactivé par défaut au démarrage
+        self.enabled = False
+        self.create_subscription(Bool, 'pc/stt/enable', self.enable_callback, 10)
+
         self.recognizer = sr.Recognizer()
-        self.get_logger().info("Google STT prêt !")
 
-        self.audio_buffer = []
-        self.is_recording = False
-        self.silence_counter = 0
-        self.SILENCE_LIMIT = 15    # ~0.3s
-        self.ENERGY_THRESHOLD = 200 # À ajuster selon les logs d'énergie
+        # Réglages pour éviter de capter le "silence bruyant"
+        self.recognizer.dynamic_energy_threshold = True
+        self.recognizer.energy_threshold = 400 
+        self.recognizer.pause_threshold = 0.8
+        self.recognizer.phrase_threshold = 0.3 # Évite de déclencher sur des bruits de 0.1s
+        self.recognizer.non_speaking_duration = 0.2
 
-        self.sub_audio = self.create_subscription(UInt8MultiArray, '/pc/raw_audio', self.audio_callback, 100)
-        self.pub_text = self.create_publisher(String, '/pc/user_speech', 10)
+        self.mic = sr.Microphone()
+        self.thread = threading.Thread(target=self.listen_loop, daemon=True)
+        self.thread.start()
 
-    def audio_callback(self, msg):
-        audio_chunk = np.frombuffer(bytes(msg.data), dtype=np.int16)
-        energy = np.abs(audio_chunk).mean()
-        
+        self.get_logger().info("STT Node prêt et sécurisé")
 
-        if energy > self.ENERGY_THRESHOLD:
-            if not self.is_recording:
-                self.get_logger().info("Écoute (Google)...")
-                self.is_recording = True
-            self.audio_buffer.extend(bytes(msg.data))
-            self.silence_counter = 0
-        elif self.is_recording:
-            self.audio_buffer.extend(bytes(msg.data))
-            self.silence_counter += 1
-            if self.silence_counter >= self.SILENCE_LIMIT:
-                self.transcribe_free_google()
-                self.audio_buffer = []
-                self.is_recording = False
-                self.silence_counter = 0
+    def enable_callback(self, msg):
+        self.enabled = msg.data
+        status = "ACTIF" if self.enabled else "INACTIF"
+        self.get_logger().info(f"État du STT : {status}")
 
-    def transcribe_free_google(self):
-        self.get_logger().info("Envoi à Google STT...")
-        
-        # Conversion du buffer en objet AudioData pour speech_recognition
-        raw_data = bytes(self.audio_buffer)
-
-        with open("debug_audio.wav", "wb") as f:
-            with wave.open(f, 'wb') as wf:
-                wf.setnchannels(1)
-                wf.setsampwidth(2)
-                wf.setframerate(16000)
-                wf.writeframes(raw_data)
-        self.get_logger().info("Fichier debug_audio.wav enregistré. Écoute-le !")
-        
-        # On crée un faux fichier WAV en mémoire pour que Google comprenne le format
-        with io.BytesIO() as wav_file:
-            with wave.open(wav_file, 'wb') as wf:
-                wf.setnchannels(1)
-                wf.setsampwidth(2) # 16-bit
-                wf.setframerate(16000)
-                wf.writeframes(raw_data)
-            wav_file.seek(0)
+    def listen_loop(self):
+        with self.mic as source:
+            self.get_logger().info("Calibration...")
+            # On augmente un peu la calibration pour mieux filtrer le bruit des moteurs/ventilos
+            self.recognizer.adjust_for_ambient_noise(source, duration=1.5)
             
-            with sr.AudioFile(wav_file) as source:
-                audio_data = self.recognizer.record(source)
+            while rclpy.ok():
+                if not self.enabled:
+                    time.sleep(0.2)
+                    continue
+                try:
+                    self.get_logger().info("Écoute...")
+                    audio = self.recognizer.listen(source, timeout=None, phrase_time_limit=10)
 
-        try:
-            # L'API magique sans clé
-            text = self.recognizer.recognize_google(audio_data, language="fr-FR")
-            self.get_logger().info(f"RECONNU : '{text}'")
-            
-            msg = String()
-            msg.data = text
-            self.pub_text.publish(msg)
-            
-        except sr.UnknownValueError:
-            self.get_logger().info("Google n'a pas compris l'audio.")
-        except sr.RequestError as e:
-            self.get_logger().error(f"Erreur réseau Google STT : {e}")
+                    self.get_logger().info("Analyse...")
+                    text = self.recognizer.recognize_google(audio, language="fr-FR")
+
+                    # NETTOYAGE ET VALIDATION
+                    if text:
+                        clean_text = text.strip()
+                        if len(clean_text) > 0:
+                            self.get_logger().info(f"RÉSULTAT : {clean_text}")
+                            self.pub.publish(String(data=clean_text))
+                        else:
+                            self.get_logger().warn("Texte vide après nettoyage, pas d'envoi.")
+                    
+                except sr.UnknownValueError:
+                    # On réduit le log pour ne pas polluer, mais on ne publie rien
+                    self.get_logger().info("Bruit détecté mais aucun mot reconnu.")
+                    continue
+                except sr.RequestError as e:
+                    self.get_logger().error(f"Erreur réseau Google : {e}")
+                except Exception as e:
+                    self.get_logger().error(f"Erreur imprévue : {e}")
 
 def main(args=None):
     rclpy.init(args=args)
     node = STTNode()
-    rclpy.spin(node)
-    rclpy.shutdown()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()

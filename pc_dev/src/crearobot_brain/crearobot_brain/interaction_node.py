@@ -1,6 +1,6 @@
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import String
+from std_msgs.msg import String, Bool
 import json
 from . import config
 
@@ -24,13 +24,24 @@ class InteractionNode(Node):
         
         # Pour le feedback ecrit de C1
         self.vision_feedback_sub = self.create_subscription(String, '/pc/vision/feedback', self.receive_vlm_feedback, 10)
+        
+        # Pour activer le stt node
+        self.stt_enable_pub = self.create_publisher(Bool, '/pc/stt/enable', 10)
+
+    def set_stt(self, state):
+        """Méthode utilitaire pour activer/désactiver le micro"""
+        msg = Bool()
+        msg.data = state
+        self.stt_enable_pub.publish(msg)
+        status = "ACTIF" if state else "INACTIF"
+        self.get_logger().info(f"Micro STT : {status}")
 
     def execute_phase(self, msg):
         cmd = msg.data
         self.get_logger().info(f"Réception commande : {cmd}")
 
         if cmd == "START_PHASE_1":
-            self.send_robot("hi", "happy", "Bonjour ! On va dessiner ensemble. Es-tu prêt ?")
+            self.send_robot("hi", "happy", "Bonjour ! Je m'appelle QT. On va dessiner ensemble. Es-tu prêt ?")
             
         elif cmd == "START_PHASE_2":
             # Le robot fait son intro
@@ -76,8 +87,9 @@ class InteractionNode(Node):
 
     # Callback pour C1
     def receive_vlm_feedback(self, msg):
-        # Dès que le VisionNode a fini, on fait parler le robot
+        # Dès que le VisionNode a fini, on fait parler le robot et on active le noeud stt pour permettre à l'etudiant de repondre
         self.send_robot("happy", "happy", msg.data)
+        self.set_stt(True)
 
 def main(args=None):
     rclpy.init(args=args)
