@@ -143,6 +143,34 @@ ros2 run crearobot_brain vision
 
 ---
 
+## Structure de l'expérience
+
+```mermaid
+flowchart TD
+    A[PHASE : START_INTRO] --> B
+
+    subgraph LOOP ["BOUCLE ITÉRATIVE (3 TOURS)"]
+        B --> C[START_DRAWING_X<br/>Durée : 180s<br/>Tête : inclinée (Pitch 20)]
+        C --> D{Décision de transition}
+        D -->|Tour < 3| E[START_FEEDBACK_X<br/>Tête : droite (Pitch 0)<br/>Échanges : 4 (VLM + chat)]
+        E --> C
+        D -->|Tour = 3| F[ENDING]
+    end
+
+    F --> G[PHASE : START_ENDING]
+```
+
+
+### Détail des phases
+
+| Phase | Commande | Description |
+|---|---|---|
+| Introduction | `START_INTRO` | Accueil du participant |
+| Dessin (×3) | `START_DRAWING_X` | 180s de dessin, tête inclinée (Pitch 20) |
+| Feedback (×2) | `START_FEEDBACK_X` | 4 échanges VLM + Chat, tête droite (Pitch 0) |
+| Conclusion | `START_ENDING` | Fin de l'expérience |
+
+
 ## Fonctionnalités clés
 
 ### Synchronisation parfaite (lipsync)
@@ -221,3 +249,4 @@ Une valeur de 20.0 est utilisée pour le regard vers le bas (dessin) et 0.0 pour
 ---
 
 *Développé par Marco G.*
+
