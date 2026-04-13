@@ -20,7 +20,7 @@ class VisionNode(Node):
         self.get_logger().info("Vision Node prêt")
 
     def handle_trigger(self, msg):
-        if msg.data == "ANALYZE_C1":
+        if msg.data == "ANALYZE_IMAGE":
             self.get_logger().info("Trigger reçu, capture de l'image...")
             
             # Ouverture de la caméra 

@@ -1,6 +1,6 @@
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import String, Bool
+from std_msgs.msg import String, Bool, Float64MultiArray
 import roslibpy
 import json
 import time
@@ -19,8 +19,8 @@ class GatewayNode(Node):
         self.ros1_client = roslibpy.Ros(host='192.168.100.1', port=9090)
         self.ros1_client.run()
 
-        # Topic de retour vers le robot (pour bloquer les oreilles internes si besoin)
-        self.is_talking_pub = roslibpy.Topic(self.ros1_client, '/pc/is_talking', 'std_msgs/Bool')
+        # Topic ROS 1 pour le contrôle de la tête 
+        self.head_pub_ros1 = roslibpy.Topic(self.ros1_client, '/qt_robot/head_position/command', 'std_msgs/Float64MultiArray')
 
         # Déclaration des services ROS 1 du robot
         self.talk_srv        = roslibpy.Service(self.ros1_client, '/qt_robot/behavior/talkText',  'qt_robot_interface/behavior_talk_text')
@@ -34,6 +34,9 @@ class GatewayNode(Node):
 
         # Subscriber ROS 2 : reçoit les ordres d'action (depuis brain_node)
         self.subscription = self.create_subscription(String, '/pc/qtaction', self.listener_callback, 10)
+
+        # Subscriber ROS 2 pour la position de la tête 
+        self.head_sub = self.create_subscription(Float64MultiArray, '/pc/head_position/command', self.head_callback, 10)
 
         self.get_logger().info("Gateway Active")
 
@@ -59,9 +62,6 @@ class GatewayNode(Node):
         try:
             data = json.loads(msg.data)
             geste, emotion, texte = data[0], data[1], data[2]
-
-            # On signale au robot qu'il parle (pour éviter qu'il s'écoute lui-même)
-            self.is_talking_pub.publish(roslibpy.Message({'data': True}))
             
             self.get_logger().info(f'Action : {geste} | {emotion} | "{texte}"')
 
@@ -73,12 +73,19 @@ class GatewayNode(Node):
             ]
             self.ts.sync(tasks)
 
-            self.is_talking_pub.publish(roslibpy.Message({'data': False}))
-
         except Exception as e:
             # Si c'est juste une chaîne simple, on fait juste parler le robot
             self.get_logger().warn(f"Format JSON non détecté, exécution texte simple.")
             self.talk_srv.call(roslibpy.ServiceRequest({'message': msg.data}))
+        
+    def head_callback(self, msg):
+        """ Reçoit la position [Yaw, Pitch] en ROS 2 et l'envoie au robot en ROS 1 """
+        try:
+            # On prépare le message pour ROS 1 (dictionnaire pour roslibpy)
+            ros1_msg = roslibpy.Message({'data': list(msg.data)})
+            self.head_pub_ros1.publish(ros1_msg)
+        except Exception as e:
+            self.get_logger().error(f"Erreur envoi tête ROS 1 : {e}")
 
 def main(args=None):
     rclpy.init(args=args)

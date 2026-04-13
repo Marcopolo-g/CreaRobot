@@ -33,7 +33,7 @@ Pour garantir une interaction fluide, tous les capteurs (micro, caméra) sont br
 |---|---|---|
 | Logique | `orchestrator_node` | Machine à états — 5 phases TCT-DP |
 | Dispatcher | `interaction_node` | Traduit les phases en actions et en gestes / émotions / paroles |
-| Audition | `stt_node` | Capture micro local + Google STT |
+| Audition | `stt_node` | Capture micro local +  STT local (Faster-Whisper)|
 | Vision | `vision_node` | Flux local via caméra USB externe |
 | Cognition | `brain_node` | llm : analyse le texte et image, choisit les actions et les images |
 | Projection | `projection_node` | Affiche le visuel du dessin sur le projecteur HDMI |
@@ -68,11 +68,24 @@ sftp://qtrobot@192.168.100.1/
 
 ### Sur le PC - ROS 2 Humble / Python 3.10
 
+#### Dépendances
+
 ```bash
 # Python
-pip install roslibpy openai==0.28 rclpy opencv-python numpy SpeechRecognition PyAudio 
+pip install roslibpy openai==0.28 rclpy opencv-python numpy faster-whisper pyaudio
 ```
-It is necesary that your microphone is the default one
+
+#### Configuration du Micro 
+
+Pour que le stt_node fonctionne, votre microphone USB doit être défini comme périphérique par défaut sur le système Linux.
+
+Listez vos sources : ```pactl list short sources```
+
+Définissez la source audio par défaut avec la commande suivante (remplacez la partie entre guillemets par le nom de votre périphérique trouvé) :
+
+```bash
+pactl set-default-source ”NOM_DU_PERIPHERIQUE”
+```
 
 ## Mise en route
 
@@ -98,7 +111,7 @@ ros2 launch crearobot_brain launch.py
 Terminal 2 : Pilote de l'expérience
 
 ```bash
-# À lancer une fois que le Terminal 1 affiche "ROBOT PRÊT". Ce terminal permet de taper "oui", "fini" pour changer de phase.
+# À lancer une fois que le Terminal 1 affiche que tous les noeuds se sont bien lancés sans erreur.
 ros2 run crearobot_brain orchestrator
 ```
 
@@ -112,7 +125,7 @@ ros2 run crearobot_brain interaction
 # Orchestrateur de l'expérience
 ros2 run crearobot_brain orchestrator
 
-# Cerveau LLM réactif
+# Cerveau LLM 
 ros2 run crearobot_brain brain
 
 # La passerelle de commande
@@ -130,6 +143,34 @@ ros2 run crearobot_brain vision
 
 ---
 
+## Structure de l'expérience
+
+```mermaid
+flowchart TD
+    A[PHASE : START_INTRO] --> B
+
+    subgraph LOOP ["BOUCLE ITÉRATIVE (3 TOURS)"]
+        B --> C[START_DRAWING_X<br/>Durée : 180s<br/>Tête : inclinée (Pitch 20)]
+        C --> D{Décision de transition}
+        D -->|Tour < 3| E[START_FEEDBACK_X<br/>Tête : droite (Pitch 0)<br/>Échanges : 4 (VLM + chat)]
+        E --> C
+        D -->|Tour = 3| F[ENDING]
+    end
+
+    F --> G[PHASE : START_ENDING]
+```
+
+
+### Détail des phases
+
+| Phase | Commande | Description |
+|---|---|---|
+| Introduction | `START_INTRO` | Accueil du participant |
+| Dessin (×3) | `START_DRAWING_X` | 180s de dessin, tête inclinée (Pitch 20) |
+| Feedback (×2) | `START_FEEDBACK_X` | 4 échanges VLM + Chat, tête droite (Pitch 0) |
+| Conclusion | `START_ENDING` | Fin de l'expérience |
+
+
 ## Fonctionnalités clés
 
 ### Synchronisation parfaite (lipsync)
@@ -144,44 +185,57 @@ Un correctif dynamique soustrait le temps de chargement de l'émotion à la dur�
 
 ### Vision & projection
 
-Le `camera_node` récupère un flux local à 60 FPS sans saturer le WiFi. Le `projection_node` utilise OpenCV pour mapper une fenêtre plein écran sur la sortie HDMI du projecteur, permettant à Hyppolite d'afficher des documents, des décors ou des émotions augmentées.
+Le `camera_node` récupère un flux local à 60 FPS sans saturer le WiFi. Le `projection_node` utilise OpenCV pour mapper une fenêtre plein écran sur la sortie HDMI du projecteur, permettant à QT d'afficher la suggestion du dessin pour la conodition C2.
 
 ### Audition déportée - STT
 
-L'utilisation d'un micro cravate via `SpeechRecognition` (Google API) élimine les problèmes de gain du ReSpeaker. Un calcul d'énergie détecte la voix et n'envoie que les segments utiles au cloud, réduisant la latence à moins de 1s.
+#### Type de STT
+
+Le nœud stt_node embarque Faster-Whisper en local (modèle Base). Cela permet de supprimer la latence réseau.
 Pour garantir une interaction cohérente, le nœud d'audition n'est plus en "écoute libre" permanente. Il est désormais piloté par le topic /pc/stt/enable (Bool).
+
+#### Verrouillage micro (Half-Duplex)
+
+Pour éviter que QT ne s'écoute parler et ne génère des réponses infinies avec l'IA, un système de verrouillage Half-Duplex est implémenté :
+- Dès que QT commence une phrase, le flag is_busy passe à True.
+- Le micro est instantanément coupé (set_stt(False)).
+- Le micro n'est réactivé qu'une fois la durée théorique de la phrase écoulée (calculée dynamiquement selon la longueur du texte).
 
 ### Intelligence artificielle — LLM
 
-- **Format de sortie** : l'IA répond exclusivement en JSON `["geste", "emotion", "texte"]`
-- **Prompt système** : injection des listes fermées `LISTE_GESTES` et `LISTE_EMOTIONS` issues de `config.py` pour éviter les hallucinations
-- **Warm-up** : micro-requête au démarrage pour éliminer le cold start (latence initiale de ~6s réduite à < 2s)
+- **Analyse Multimodale** : Utilisation de GPT-4o-mini pour croiser les données visuelles (évolution du dessin) et les transcriptions auditives (STT).
 
-### Verrouillage micro (Half-Duplex)
+- **Mémoire Cumulative** : Le système maintient une "mémoire visuelle" textuelle qui s'enrichit à chaque analyse d'image, permettant au robot de comprendre la progression du dessin sans re-traiter l'intégralité des pixels.
 
-Le `gateway_node` gère le topic `/pc/is_talking`. Lorsqu'Hyppolite parle, le micro est virtuellement verrouillé pour éviter que le robot ne s'écoute lui-même et ne crée une boucle de rétroaction avec le LLM.
+### Mouvements de tête dynamique
+
+#### Engagement social et attention conjointe
+
+Afin de renforcer l'engagement social, QT adapte sa posture :
+
+- **Phase Dessin** : QT incline la tête vers le bas (HeadPitch) pour simuler une attention conjointe sur la feuille.
+
+- **Phase Feedback** : QT redresse la tête pour établir un contact visuel avec l'utilisateur pendant la discussion.
+
+#### Contrôle des Actuateurs
+
+Le contrôle des moteurs est géré via le topic /qt_robot/head_position/command.
+
+L'angle de Pitch (inclinaison) est modulé en fonction des phases de la machine à états (orchestrator_node).
+
+Une valeur de 20.0 est utilisée pour le regard vers le bas (dessin) et 0.0 pour le regard horizontal (interaction).
 
 ---
 
 ## Tests
 
-### 1. Dans le fichier tests
+### Dans le fichier tests
 
 | Fichier | Description |
 |---|---|
 | `client_bridge.py` | Test de la gateway, communication entre le robot et le pc |
 | `test_gpt.py` | Validation du format JSON et du respect des listes de gestes |
 | `bridge_client_cam.py` | Affichage du flux vidéo du robot en temps réel sur la tablette du robot |
-
-
-### 2. Dans le fichier tests_finaux
-
-| Fichier | Description |
-|---|---|
-| `brain_node_test.py` | Interaction spontanée via GPT-3.5 |
-| `camera_node_test.py` | Node de test de la caméra |
-| `gateway_node_test.py` | Node de test de la gateway |
-| `image_publisher.py` | Envoi d'une image fixe vers le projecteur |
 
 ---
 
@@ -194,4 +248,5 @@ Le `gateway_node` gère le topic `/pc/is_talking`. Lorsqu'Hyppolite parle, le mi
 
 ---
 
-*Développé par Marco G. — L@b0 Technologie Info-NUMÉRIQUE*
+*Développé par Marco G.*
+

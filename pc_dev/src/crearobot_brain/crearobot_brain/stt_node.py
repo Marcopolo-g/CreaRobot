@@ -1,88 +1,96 @@
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import String
-import speech_recognition as sr
-import threading
-import os
-from std_msgs.msg import Bool, String
+from std_msgs.msg import String, Bool
+from faster_whisper import WhisperModel
+import numpy as np
+import sounddevice as sd
+import queue
 import time
-
-os.environ['AS_SILENCE_ALSA'] = '1'
 
 class STTNode(Node):
     def __init__(self):
         super().__init__('stt_node')
         self.pub = self.create_publisher(String, '/pc/stt/transcript', 10)
-
-        # Le STT est désactivé par défaut au démarrage
-        self.enabled = False
         self.create_subscription(Bool, 'pc/stt/enable', self.enable_callback, 10)
 
-        self.recognizer = sr.Recognizer()
-
-        # Réglages pour éviter de capter le "silence bruyant"
-        self.recognizer.dynamic_energy_threshold = True
-        self.recognizer.energy_threshold = 400 
-        self.recognizer.pause_threshold = 0.8
-        self.recognizer.phrase_threshold = 0.3 # Évite de déclencher sur des bruits de 0.1s
-        self.recognizer.non_speaking_duration = 0.2
-
-        self.mic = sr.Microphone()
-        self.thread = threading.Thread(target=self.listen_loop, daemon=True)
-        self.thread.start()
-
-        self.get_logger().info("STT Node prêt et sécurisé")
+        self.enabled = False
+        self.audio_buffer = [] # On utilise une liste simple pour accumuler
+        
+        self.get_logger().info("Chargement de Whisper BASE sur CPU...")
+        
+        try:
+            # On force le CPU et le mode INT8
+            self.model = WhisperModel("base", device="cpu", compute_type="int8")
+            self.get_logger().info("--- WHISPER CPU PRET ---")
+        except Exception as e:
+            self.get_logger().error(f"Erreur : {e}")
 
     def enable_callback(self, msg):
-        self.enabled = msg.data
-        status = "ACTIF" if self.enabled else "INACTIF"
-        self.get_logger().info(f"État du STT : {status}")
+        if self.enabled != msg.data:
+            self.enabled = msg.data
+            if self.enabled:
+                self.audio_buffer = [] # Reset du son quand on active
+                self.get_logger().info("Micro ACTIF - Parlez maintenant...")
+            else:
+                self.get_logger().info("Micro INACTIF")
 
-    def listen_loop(self):
-        with self.mic as source:
-            self.get_logger().info("Calibration...")
-            # On augmente un peu la calibration pour mieux filtrer le bruit des moteurs/ventilos
-            self.recognizer.adjust_for_ambient_noise(source, duration=1.5)
+    def audio_callback(self, indata, frames, time, status):
+        if self.enabled:
+            self.audio_buffer.append(indata.copy())
+
+    def process_live(self):
+        """Analyse ce qui a ete capture jusqu'a present"""
+        if not self.audio_buffer:
+            return
+
+        # On transforme la liste en tableau numpy
+        recording = np.concatenate(self.audio_buffer, axis=0).flatten()
+        
+        # On ne lance l'analyse que si on a au moins 1.5 seconde de son
+        if len(recording) < 16000 * 1.5:
+            return
+
+        try:
+            # vad_filter=True est essentiel ici pour separer les phrases
+            segments, info = self.model.transcribe(recording, language="fr", vad_filter=True)
             
-            while rclpy.ok():
-                if not self.enabled:
-                    time.sleep(0.2)
-                    continue
-                try:
-                    self.get_logger().info("Écoute...")
-                    audio = self.recognizer.listen(source, timeout=None, phrase_time_limit=10)
+            full_text = ""
+            last_end = 0
+            for segment in segments:
+                full_text += segment.text
+                last_end = segment.end # Fin du dernier mot detecte
 
-                    self.get_logger().info("Analyse...")
-                    text = self.recognizer.recognize_google(audio, language="fr-FR")
+            # CALCUL DE LA PAUSE :
+            # Si le dernier mot fini depuis plus de 1.0 seconde, on considere la phrase finie
+            duration_total = len(recording) / 16000
+            silence_at_end = duration_total - last_end
 
-                    # NETTOYAGE ET VALIDATION
-                    if text:
-                        clean_text = text.strip()
-                        if len(clean_text) > 0:
-                            self.get_logger().info(f"RÉSULTAT : {clean_text}")
-                            self.pub.publish(String(data=clean_text))
-                        else:
-                            self.get_logger().warn("Texte vide après nettoyage, pas d'envoi.")
-                    
-                except sr.UnknownValueError:
-                    # On réduit le log pour ne pas polluer, mais on ne publie rien
-                    self.get_logger().info("Bruit détecté mais aucun mot reconnu.")
-                    continue
-                except sr.RequestError as e:
-                    self.get_logger().error(f"Erreur réseau Google : {e}")
-                except Exception as e:
-                    self.get_logger().error(f"Erreur imprévue : {e}")
+            if full_text.strip() and silence_at_end > 1.0:
+                final_text = full_text.strip()
+                self.get_logger().info(f"Phrase detectee : {final_text}")
+                
+                msg = String()
+                msg.data = final_text
+                self.pub.publish(msg)
+                
+                # On vide le buffer pour la phrase suivante
+                self.audio_buffer = []
+                
+        except Exception as e:
+            self.get_logger().error(f"Erreur transcription : {e}")
 
 def main(args=None):
     rclpy.init(args=args)
     node = STTNode()
-    try:
-        rclpy.spin(node)
-    except KeyboardInterrupt:
-        pass
-    finally:
-        node.destroy_node()
-        rclpy.shutdown()
 
-if __name__ == '__main__':
-    main()
+    # Flux audio ouvert en continu
+    with sd.InputStream(samplerate=16000, channels=1, callback=node.audio_callback):
+        while rclpy.ok():
+            rclpy.spin_once(node, timeout_sec=0.1)
+            
+            # On analyse en continu pendant que le micro est ouvert
+            if node.enabled:
+                node.process_live()
+
+    node.destroy_node()
+    rclpy.shutdown()
