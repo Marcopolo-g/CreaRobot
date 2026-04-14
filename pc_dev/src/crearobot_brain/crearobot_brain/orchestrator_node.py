@@ -34,15 +34,14 @@ class OrchestratorNode(Node):
     def state_machine(self, msg):
         text = msg.data.lower()
         
-        if self.state == "INTRO":
-            time.sleep(3) # 4 secs delay before moving on to the next phase
-            self.change_state("DRAWING")
-            
+        if self.state == "INTRO" and any(x in text for x in ["oui", "pret"]):
+            self.change_state("ICE_BREAKING")
+        
         elif self.state == "DRAWING" and any(x in text for x in ["fini", "termine"]):
             self.stop_timer()
         
             if self.current_loop >= config.MAX_LOOPS:
-                self.change_state("ENDING")
+                self.change_state("TITLE")
             else:
                 self.change_state("FEEDBACK")
 
@@ -52,11 +51,17 @@ class OrchestratorNode(Node):
         
         if self.state == "INTRO":
             msg.data = "START_INTRO"
+        elif self.state == "ICE_BREAKING":
+            msg.data = "START_ICE_BREAKING"
+        elif self.state == "TASK_INTRO":
+            msg.data = "START_TASK_INTRO"
         elif self.state == "DRAWING":
             msg.data = f"START_DRAWING_{self.current_loop}"
             self.start_draw_timer()
         elif self.state == "FEEDBACK":
             msg.data = f"START_FEEDBACK_{self.current_loop}"
+        elif self.state == "TITLE":
+            msg.data = "START_TITLE"
         elif self.state == "ENDING":
             msg.data = "START_ENDING"
             
@@ -71,26 +76,36 @@ class OrchestratorNode(Node):
         self.phase_timer = self.create_timer(config.DRAW_DURATION, self.on_draw_timeout)
 
     def on_draw_timeout(self):
-        self.get_logger().info(f"Fin du temps de dessin pour le tour {self.current_loop}")
         self.stop_timer()
 
         # SI on est au dernier tour, on ne fait pas de feedback, on finit !
         if self.current_loop >= config.MAX_LOOPS:
-            self.get_logger().info("Dernier tour atteint. Passage à la conclusion.")
-            self.change_state("ENDING")
+            self.change_state("TITLE")
         else:
             # Sinon on passe au feedback normalement
             self.change_state("FEEDBACK")
 
     def on_interaction_done(self, msg):
         """ QT a fini son feedback : on lance toujours le tour suivant """
+        if self.state == "INTRO" and msg.data == "DONE":
+            self.change_state("ICE_BREAKING")
+        
+        elif self.state == "ICE_BREAKING" and msg.data == "DONE":
+            self.change_state("TASK_INTRO")
+
+        elif self.state == "TASK_INTRO" and msg.data == "DONE":
+            self.change_state("DRAWING")
+    
         # On ne réagit que si on est en phase Feedback et qu'on reçoit "DONE"
-        if self.state == "FEEDBACK" and msg.data == "DONE":
+        elif self.state == "FEEDBACK" and msg.data == "DONE":
             self.get_logger().info(f"Fin du feedback pour le tour {self.current_loop}")
             
             # On passe au tour suivant et on relance le dessin
             self.current_loop += 1
             self.change_state("DRAWING")
+        
+        elif self.state == "TITLE" and msg.data == "DONE":
+            self.change_state("ENDING")
 
 
     def stop_timer(self):

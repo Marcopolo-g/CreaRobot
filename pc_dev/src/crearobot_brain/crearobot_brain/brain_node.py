@@ -24,17 +24,34 @@ class BrainNode(Node):
 
         self.phase_sub = self.create_subscription(String, '/pc/phase_control', self.phase_callback, 10)
         
-        self.get_logger().info("Brain Node pret pour le travail iteratif")
+        self.warmup_llm()
+
+        self.get_logger().info("Brain Node prêt")
 
     def phase_callback(self, msg):
         self.current_phase = msg.data
+
+    def warmup_llm(self):
+        # On lance une requete minuscule pour ouvrir la connexion
+        try:
+            openai.ChatCompletion.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": "ping"}],
+                max_tokens=1
+            )
+        except Exception as e:
+            self.get_logger().error(f"Echec du warmup : {e}")
 
     def process_vision(self, msg):
         # On commence par analyser ce qu'il y a sur l'image
         self.get_logger().info("Analyse du dessin en cours...")
 
         try:
-            if not self.visual_memory:
+            is_title_phase = "START_TITLE" in self.current_phase
+
+            if is_title_phase:
+                prompt = config.PROMPT_TITLE
+            elif not self.visual_memory:
                 prompt = "Décris ce que tu vois sur le dessin de maniere a pouvoir te rappeler du dessin plus tard sans le voir (entre autre, précise les formes et les objets de ce dessin)."
             else:
                 prompt = f"Precedemment, le dessin etait : {self.visual_memory}."
@@ -52,14 +69,19 @@ class BrainNode(Node):
             )
             
             # Mise a jour de la memoire visuelle
-            new_info = response.choices[0].message.content
+            answer = response.choices[0].message.content
+
+            if is_title_phase:
+                # On envoie le titre généré et on s'arrête là !
+                self.send_to_robot(answer)
+                return
 
             if not self.visual_memory:
                 # Initialisation
-                self.visual_memory = new_info
+                self.visual_memory = answer
             else:
                 # On empile les ajouts pour mettre en évidence la progression
-                self.visual_memory += f"\n[Ajouts récents] : {new_info}"
+                self.visual_memory += f"\n[Ajouts récents] : {answer}"
             
             # On aiguille selon la condition definie dans la config
             if config.CONDITION == "C1":
@@ -96,19 +118,33 @@ class BrainNode(Node):
         # Ici on viendra inserer l'appel a l'API de generation d'image
         self.send_to_robot(msg_c2)
 
+
     def handle_dialogue(self, msg):
-        if "START_FEEDBACK" not in self.current_phase:
+        # On vérifie si on est dans une phase autorisée (Feedback OU Ice Breaking)
+        is_feedback = "START_FEEDBACK" in self.current_phase
+        is_ice_breaking = "START_ICE_BREAKING" in self.current_phase
+
+        if not is_feedback and not is_ice_breaking:
             return
         
-        # Si on est en phase de discussion libre entre deux coups de crayons
-        if not self.visual_memory:
+        # En feedback on a besoin de la vision, en ice breaking non.
+        if is_feedback and not self.visual_memory:
             return
 
         user_input = msg.data
-        messages = [{"role": "system", "content": config.PROMPT_C1}]
-        messages.append({"role": "system", "content": f"Memoire visuelle : {self.visual_memory}"})
         
-        # Ajout de l'historique pour garder le fil de la conversation
+        # On définit le prompt et le contexte selon la phase
+        if is_ice_breaking:
+            # Prompt simple pour briser la glace
+            system_prompt = config.PROMPT_ICE_BREAKING
+            messages = [{"role": "system", "content": system_prompt}]
+        else:
+            # Prompt classique pour le feedback du dessin
+            system_prompt = config.PROMPT_C1
+            messages = [{"role": "system", "content": system_prompt}]
+            messages.append({"role": "system", "content": f"Memoire visuelle : {self.visual_memory}"})
+        
+        # On ajoute l'historique récent (valable pour les deux phases)
         messages.extend(self.chat_history[-6:])
         messages.append({"role": "user", "content": user_input})
 
@@ -120,13 +156,15 @@ class BrainNode(Node):
             )
             
             answer = response.choices[0].message.content
+            
+            # On enregistre dans l'historique pour que QT réponde de manière cohérente
             self.chat_history.append({"role": "user", "content": user_input})
             self.chat_history.append({"role": "assistant", "content": answer})
             
             self.send_to_robot(answer)
             
         except Exception as e:
-            self.get_logger().error(f"Erreur Dialogue : {e}")
+            self.get_logger().error(f"Erreur Dialogue ({self.current_phase}) : {e}")
 
     def send_to_robot(self, text):
         msg = String()

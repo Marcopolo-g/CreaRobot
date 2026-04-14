@@ -54,12 +54,41 @@ class InteractionNode(Node):
     def execute_phase(self, msg):
         self.current_cmd = msg.data
         self.is_busy = False
+
+        if self.feedback_timer:
+            self.feedback_timer.cancel()
+            self.feedback_timer = None
         
         if "START_INTRO" in self.current_cmd:
             self.move_head(0, 0)
-            self.send_robot("hi", "happy", "Bonjour ! Je m'appelle QT. Aujourd'hui, on va dessiner ensemble ! Je vais te donner une feuille avec des petites formes dessus — et ton objectif, c'est de les utiliser pour faire un dessin. Tu peux dessiner ce que tu veux, comme tu veux. Il n'y a pas de bonne ou de mauvaise réponse. Es-tu prêt ?")
-            self.set_stt(True) # On ouvre le micro pour le "pret/oui"
+            text = "Bonjour ! Je m'appelle QT. Je suis ravi de faire ta connaissance. Es-tu prêt pour notre activité ?"
+            self.send_robot("hi", "happy", text)
+            # On ouvre le micro si besoin pour le "pret/oui"
+
+            duree = self.calculate_speech_duration(text) + 4
+            self.feedback_timer = self.create_timer(duree, self.finish_feedback_loop)
             
+        elif "START_ICE_BREAKING" in self.current_cmd:  
+            self.move_head(0, 0)
+            self.dialogue_count = 0
+
+            text = "Super ! Avant de commencer, dis-moi, est-ce que tu aimes dessiner d'habitude ?"
+            self.send_robot("happy", "happy", text)
+
+            self.set_stt(True)
+            
+            duree = self.calculate_speech_duration(text) 
+            self.feedback_timer = self.create_timer(duree, self.finish_feedback_loop)
+            
+
+        elif "START_TASK_INTRO" in self.current_cmd:
+            self.move_head(0, 0)
+            text = "Je vais te donner une feuille avec des petites formes dessus — et ton objectif, c'est de les utiliser pour faire un dessin. Tu peux dessiner ce que tu veux, comme tu veux. Il n'y a pas de bonne ou de mauvaise réponse. Si tu as fini le dessin avant la fin du temps, tu peux dire que tu as fini. Es-tu prêt ?"
+            self.send_robot("talk", "neutral", text)
+            # C'est un monologue, on envoie DONE à la fin du temps de parole
+            duree = self.calculate_speech_duration(text) + 3
+            self.feedback_timer = self.create_timer(duree, self.finish_feedback_loop)
+
         elif "START_DRAWING" in self.current_cmd:
             self.move_head(0, 20)
 
@@ -76,11 +105,23 @@ class InteractionNode(Node):
             self.move_head(0, 0)
             self.dialogue_count = 0 # reset du compteur pour chaque phase de feedback
             self.trigger_feedback()
+        
+        elif "START_TITLE" in self.current_cmd:
+            # Le robot se penche pour admirer l'œuvre finale
+            self.move_head(0, 20)
+            text = "C'est fini ! Laisse-moi admirer ton œuvre une dernière fois pour lui trouver un titre..."
+            self.send_robot("happy", "happy", text)
+            
+            self.set_stt(False)
+            # On déclenche la photo après la phrase
+            wait_time = self.calculate_speech_duration(text) + 2
+            if self.photo_timer: self.photo_timer.cancel()
+            self.photo_timer = self.create_timer(wait_time, self.send_camera_trigger)
             
         elif "START_ENDING" in self.current_cmd:
             self.move_head(0, 0)
-            self.send_robot("bye", "happy", "Voilà, le temps est écoulé ! Merci d'avoir dessiné avec moi aujourd'hui !")
             self.set_stt(False)
+            self.feedback_timer = self.create_timer(1.0, self.say_goodbye_final)
 
     def trigger_feedback(self):
         """ Logique des conditions C0, C1, C2 """
@@ -137,6 +178,9 @@ class InteractionNode(Node):
         """ Reponse du LLM/VLM recue """
         self.is_busy = True
         self.set_stt(False)
+
+        if self.feedback_timer:
+            self.feedback_timer.cancel()
         
         self.send_robot("None", "None", msg.data)
         
@@ -170,28 +214,45 @@ class InteractionNode(Node):
             self.feedback_timer.cancel()
             self.feedback_timer = None
 
-        if config.CONDITION == "C0":
-            self.is_busy = False
-            self.set_stt(True)
-            self.get_logger().info("Prêt pour la suite.")
-            
-            # Si on etait en phase feedback, on dit a l'orchestrateur de relancer le dessin
-            if "START_FEEDBACK" in self.current_cmd:
+        self.is_busy = False
+
+        if "START_INTRO" in self.current_cmd:
+            self.loop_done_pub.publish(String(data="DONE"))
+
+        # --- LOGIQUE DE SORTIE POUR ICE_BREAKING ET FEEDBACK ---
+        elif "START_ICE_BREAKING" in self.current_cmd:
+            if self.dialogue_count < config.DIALOGUE_DURATION:
+                self.set_stt(True)
+                self.get_logger().info("Ice Breaking : On continue la discussion.")
+            else:
+                self.get_logger().info("Ice Breaking fini. Envoi de DONE.")
                 self.loop_done_pub.publish(String(data="DONE"))
+
+        elif "START_TASK_INTRO" in self.current_cmd:
+            self.loop_done_pub.publish(String(data="DONE"))
+
         
-        elif config.CONDITION == "C1":
-            if "START_FEEDBACK" in self.current_cmd:
+        # Sortie du Feedback classique (C0 ou C1)
+        elif "START_FEEDBACK" in self.current_cmd:
+            if config.CONDITION == "C0":
+                self.loop_done_pub.publish(String(data="DONE"))
+            elif config.CONDITION == "C1":
                 if self.dialogue_count < config.MAX_EXCHANGES:
-                    # On rouvre le micro pour continuer la discussion
                     self.set_stt(True)
-                    self.get_logger().info("Micro rouvert pour la suite du dialogue.")
                 else:
-                    # On a atteint 5 échanges, on prévient l'orchestrateur de changer de phase
-                    self.get_logger().info("Limite d'échanges atteinte. Fin du feedback.")
                     self.loop_done_pub.publish(String(data="DONE"))
-            # else:
-            #     # Pour l'INTRO ou C0 si nécessaire
-            #     self.set_stt(True)
+            
+        elif "START_TITLE" in self.current_cmd:
+            self.loop_done_pub.publish(String(data="DONE"))
+
+
+    def say_goodbye_final(self):
+        """ Callback pour déclencher la parole après le mouvement de tête """
+        if self.feedback_timer:
+            self.feedback_timer.cancel()
+            self.feedback_timer = None
+            
+        self.send_robot("bye", "happy", "Voilà, le temps est écoulé ! Merci d'avoir dessiné avec moi aujourd'hui !")
 
     def tour_callback(self, msg):
         """Met à jour le numéro du tour actuel envoyé par l'orchestrateur"""
