@@ -174,13 +174,13 @@ graph TD
     
 
     %% Styles de couleurs pour la clarté du README
-    style INTRO fill:#f9f,stroke:#333
-    style ICE fill:#fff4dd,stroke:#333
-    style TASK fill:#e1f5fe,stroke:#333
-    style DRAW fill:#bbf,stroke:#333
-    style FEEDBACK fill:#bfb,stroke:#333
-    style TITLE fill:#d1c4e9,stroke:#333
-    style ENDING fill:#fbb,stroke:#333
+    style INTRO fill:#f9f,stroke:#333, color:#000
+    style ICE fill:#fff4dd,stroke:#333, color:#000
+    style TASK fill:#e1f5fe,stroke:#333, color:#000
+    style DRAW fill:#bbf,stroke:#333, color:#000
+    style FEEDBACK fill:#bfb,stroke:#333, color:#000
+    style TITLE fill:#d1c4e9,stroke:#333, color:#000
+    style ENDING fill:#fbb,stroke:#333, color:#000
 ```
 
 
