@@ -146,19 +146,43 @@ ros2 run crearobot_brain vision
 ## Structure de l'expérience
 
 ```mermaid
-flowchart TD
-    A[PHASE : START_INTRO] --> B
+graph TD
+    %% Phase d'initialisation
+    INTRO[<b>START_INTRO</b><br/>] 
+    
+    INTRO -- "OUI / Timeout" --> ICE[<b>START_ICE_BREAKING</b><br/>4 Échanges amicaux<br/><i>Warmup LLM</i>]
+    
+    ICE -- "DONE" --> TASK[<b>START_TASK_INTRO</b><br/>Explication des consignes]
+    
+    TASK -- "Timeout" --> DRAW
 
-    subgraph LOOP ["BOUCLE ITÉRATIVE (3 TOURS)"]
-        B --> C[START_DRAWING_X<br/>Durée : 180s<br/>Tête : inclinée (Pitch 20)]
-        C --> D{Décision de transition}
-        D -->|Tour < 3| E[START_FEEDBACK_X<br/>Tête : droite (Pitch 0)<br/>Échanges : 4 (VLM + chat)]
-        E --> C
-        D -->|Tour = 3| F[ENDING]
+    %% Cycle itératif
+    subgraph "Cycle Principal (MAX_LOOPS Tours)"
+        DRAW["<b>START_DRAWING_X</b><br/>120s | Tête basse (Pitch 20)"]
+        DRAW --> DECIDE{Tour X = 
+        MAX_LOOPS ?}
+        
+        DECIDE -- "NON" --> FEEDBACK["<b>START_FEEDBACK_X</b><br/>2 Échanges | Tête haute (Pitch 0)"]
+        FEEDBACK --> INC[Tour + 1]
+        INC --> DRAW
     end
 
-    F --> G[PHASE : START_ENDING]
+    %% Phase de clôture
+    DECIDE -- "OUI" --> TITLE["<b>START_TITLE</b><br/>Analyse VLM & Titre final<br/>Tête basse (Pitch 20)"]
+    
+    TITLE -- "DONE" --> ENDING["<b>START_ENDING</b><br/>"]
+    
+
+    %% Styles de couleurs pour la clarté du README
+    style INTRO fill:#f9f,stroke:#333
+    style ICE fill:#fff4dd,stroke:#333
+    style TASK fill:#e1f5fe,stroke:#333
+    style DRAW fill:#bbf,stroke:#333
+    style FEEDBACK fill:#bfb,stroke:#333
+    style TITLE fill:#d1c4e9,stroke:#333
+    style ENDING fill:#fbb,stroke:#333
 ```
+
 
 
 ### Détail des phases

@@ -145,31 +145,44 @@ ros2 run crearobot_brain vision
 
 ## Structure de l'expérience
 
+```mermaid
 graph TD
     %% Phase d'initialisation
-    START((DÉPART)) --> INTRO[<b>START_INTRO</b><br/>Bonjour, es-tu prêt ?]
-    INTRO -- 'OUI' --> ICE[<b>START_ICE_BREAKING</b><br/>2 Échanges amicaux]
-    ICE -- 'DONE' --> TASK[<b>START_TASK_INTRO</b><br/>Explication des consignes]
-    TASK -- 'DONE' --> LOOP{Boucle de Dessin}
+    INTRO[<b>START_INTRO</b><br/>] 
+    
+    INTRO -- "OUI / Timeout" --> ICE[<b>START_ICE_BREAKING</b><br/>4 Échanges amicaux<br/><i>Warmup LLM</i>]
+    
+    ICE -- "DONE" --> TASK[<b>START_TASK_INTRO</b><br/>Explication des consignes]
+    
+    TASK -- "Timeout" --> DRAW
 
     %% Cycle itératif
     subgraph "Cycle Principal (MAX_LOOPS Tours)"
-        LOOP --> DRAW["<b>START_DRAWING_X</b><br/>180s | Tête basse"]
-        DRAW --> DECIDE{Dernier Tour ?}
+        DRAW["<b>START_DRAWING_X</b><br/>120s | Tête basse (Pitch 20)"]
+        DRAW --> DECIDE{Tour X = 
+        MAX_LOOPS ?}
         
-        DECIDE -- NON --> FEEDBACK["<b>START_FEEDBACK_X</b><br/>4 Échanges | Tête haute"]
+        DECIDE -- "NON" --> FEEDBACK["<b>START_FEEDBACK_X</b><br/>2 Échanges | Tête haute (Pitch 0)"]
         FEEDBACK --> INC[Tour + 1]
-        INC --> LOOP
+        INC --> DRAW
     end
 
-    %% Fin
-    DECIDE -- OUI --> ENDING[<b>START_ENDING</b><br/>Merci et Au revoir]
-    ENDING --> STOP((FIN))
+    %% Phase de clôture
+    DECIDE -- "OUI" --> TITLE["<b>START_TITLE</b><br/>Analyse VLM & Titre final<br/>Tête basse (Pitch 20)"]
+    
+    TITLE -- "DONE" --> ENDING["<b>START_ENDING</b><br/>"]
+    
 
+    %% Styles de couleurs pour la clarté du README
     style INTRO fill:#f9f,stroke:#333
     style ICE fill:#fff4dd,stroke:#333
     style TASK fill:#e1f5fe,stroke:#333
     style DRAW fill:#bbf,stroke:#333
+    style FEEDBACK fill:#bfb,stroke:#333
+    style TITLE fill:#d1c4e9,stroke:#333
+    style ENDING fill:#fbb,stroke:#333
+```
+
 
 
 ### Détail des phases
