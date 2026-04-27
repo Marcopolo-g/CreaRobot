@@ -2,6 +2,9 @@ import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
 import openai
+import json
+import os
+
 from . import config
 
 class BrainNode(Node):
@@ -29,7 +32,23 @@ class BrainNode(Node):
         self.get_logger().info("Brain Node prêt")
 
     def phase_callback(self, msg):
-        self.current_phase = msg.data
+        data = json.loads(msg.data)
+        self.current_phase = data["phase"]
+        self.current_tour = data["tour"]
+        # Si on entre dans l'Ice Breaking, on donne le contexte au LLM
+        if "START_ICE_BREAKING" in self.current_phase:
+            # On vérifie si l'historique est vide pour ne pas ajouter la phrase plusieurs fois
+            if not self.chat_history:
+                question_depart = config.ICE_BREAKING_QUESTION
+                
+                # On l'ajoute comme si le robot l'avait déjà dit
+                self.chat_history.append({"role": "assistant", "content": question_depart})
+
+        # Si on quitte l'Ice Breaking pour passer aux consignes
+        if "START_TASK_INTRO" in self.current_phase:
+            if self.chat_history:
+                self.get_logger().info("Réinitialisation de la mémoire : conversation Ice Breaking effacée.")
+                self.chat_history = []
 
     def warmup_llm(self):
         # On lance une requete minuscule pour ouvrir la connexion
@@ -57,14 +76,21 @@ class BrainNode(Node):
                 prompt = f"Precedemment, le dessin etait : {self.visual_memory}."
                 prompt += f"Dis moi ce qui a change ou ce qui est nouveau ou les modifications apportées par rapport à la description précédente. Sois très précis sur les ajouts."
 
+            messages = [{"role": "system", "content": ""}]
+            messages.extend(self.chat_history)
+
+            # On ajoute l'image et le prompt actuel
+            messages.append({
+                "role": "user", 
+                "content": [
+                    {"type": "text", "text": prompt},
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{msg.data}"}}
+                ]
+            })
+
             response = openai.ChatCompletion.create(
                 model="gpt-4o-mini",
-                messages=[
-                    {"role": "user", "content": [
-                        {"type": "text", "text": prompt},
-                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{msg.data}"}}
-                    ]}
-                ],
+                messages=messages,
                 max_tokens=300
             )
             
@@ -93,17 +119,20 @@ class BrainNode(Node):
             self.get_logger().error(f"Erreur Vision : {e}")
 
     def generate_c1_feedback(self):
-        # Logique C1 : QT discute et suggere des idees
         try:
-            prompt = f"{config.PROMPT_C1}\nDessin actuel : {self.visual_memory}\n"
+            # Pour le feedback C1, on inclut aussi l'historique pour etre coherent
+            messages = [{"role": "system", "content": config.PROMPT_C1}]
+            messages.extend(self.chat_history)
+            messages.append({"role": "system", "content": f"Dessin actuel : {self.visual_memory}"})
             
             response = openai.ChatCompletion.create(
                 model="gpt-4o-mini",
-                messages=[{"role": "system", "content": prompt}],
+                messages=messages,
                 max_tokens=100
             )
             
             text = response.choices[0].message.content
+            self.chat_history.append({"role": "assistant", "content": text})
             self.send_to_robot(text)
             
         except Exception as e:
@@ -171,13 +200,23 @@ class BrainNode(Node):
         msg.data = text
         self.tts_pub.publish(msg)
 
-def main():
-    rclpy.init()
-    node = BrainNode()
+def main(args=None):
+    rclpy.init(args=args)
+    
+    # Remplace 'MonNode' par le nom de la classe du fichier (BrainNode, STTNode, etc.)
+    node = BrainNode() 
+
     try:
         rclpy.spin(node)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, rclpy.executors.ExternalShutdownException):
+        # On ne print rien ici pour les noeuds esclaves, 
+        # seul l'orchestrateur affichera le message d'arret.
         pass
     finally:
-        node.destroy_node()
-        rclpy.shutdown()
+        # Nettoyage rapide du noeud
+        if rclpy.ok():
+            node.destroy_node()
+            rclpy.shutdown()
+        
+        # Sortie immediate pour eviter la pollution des logs ROS 2
+        os._exit(0)

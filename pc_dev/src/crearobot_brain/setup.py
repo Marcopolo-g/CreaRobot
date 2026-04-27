@@ -26,6 +26,7 @@ setup(
             'gateway = crearobot_brain.gateway_node:main',
             'projection = crearobot_brain.projection_node:main',
             'vision = crearobot_brain.vision_node:main',
+            'vision_temp = crearobot_brain.vision_node_temp:main',
             'stt = crearobot_brain.stt_node:main',
         ],
     },

@@ -3,6 +3,7 @@ from rclpy.node import Node
 from std_msgs.msg import String
 import cv2
 import base64
+import os
 
 from . import config
 
@@ -62,13 +63,17 @@ class VisionNode(Node):
         except Exception as e:
             self.get_logger().error(f"Erreur lors de l'encodage/envoi : {e}")
 
-def main():
-    rclpy.init()
-    node = VisionNode()
+def main(args=None):
+    rclpy.init(args=args)
+    node = VisionNode() 
+
     try:
         rclpy.spin(node)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, rclpy.executors.ExternalShutdownException):
         pass
     finally:
-        node.destroy_node()
-        rclpy.shutdown()
+        if rclpy.ok():
+            node.destroy_node()
+            rclpy.shutdown()
+        
+        os._exit(0)

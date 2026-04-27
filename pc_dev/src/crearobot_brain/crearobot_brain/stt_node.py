@@ -4,8 +4,7 @@ from std_msgs.msg import String, Bool
 from faster_whisper import WhisperModel
 import numpy as np
 import sounddevice as sd
-import queue
-import time
+
 
 class STTNode(Node):
     def __init__(self):
@@ -46,8 +45,8 @@ class STTNode(Node):
         # On transforme la liste en tableau numpy
         recording = np.concatenate(self.audio_buffer, axis=0).flatten()
         
-        # On ne lance l'analyse que si on a au moins 1.5 seconde de son
-        if len(recording) < 16000 * 1.5:
+        # On ne lance l'analyse que si on a au moins 0.5 seconde de son
+        if len(recording) < 16000 * 0.5:
             return
 
         try:
@@ -61,11 +60,11 @@ class STTNode(Node):
                 last_end = segment.end # Fin du dernier mot detecte
 
             # CALCUL DE LA PAUSE :
-            # Si le dernier mot fini depuis plus de 1.0 seconde, on considere la phrase finie
+            # Si le dernier mot fini depuis plus de 0.8 seconde, on considere la phrase finie
             duration_total = len(recording) / 16000
             silence_at_end = duration_total - last_end
 
-            if full_text.strip() and silence_at_end > 1.0:
+            if full_text.strip() and silence_at_end > 0.8:
                 final_text = full_text.strip()
                 self.get_logger().info(f"Phrase detectee : {final_text}")
                 

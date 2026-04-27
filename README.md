@@ -14,6 +14,7 @@ Pour garantir une interaction fluide, tous les capteurs (micro, caméra) sont br
 │  orchestator_node                                              │
 |         ↓                                                      │
 │ interaction_node → vision_node      ←  [Caméra USB]            |
+|                 ou vision_node_temp ←  [Caméra Ecran HDMI]     |
 |                  → stt_node         ←  [Micro USB]             |     
 |                  → projection_node  ←  [Projecteur HDMI]       | 
 |                  → brain_node       ←  [ChatGPT]               |
@@ -35,6 +36,7 @@ Pour garantir une interaction fluide, tous les capteurs (micro, caméra) sont br
 | Dispatcher | `interaction_node` | Traduit les phases en actions et en gestes / émotions / paroles |
 | Audition | `stt_node` | Capture micro local +  STT local (Faster-Whisper)|
 | Vision | `vision_node` | Flux local via caméra USB externe |
+| Vision démo | `vision_node_temp` | Mode Science Infuse : Capture l'écran HDMI (via mss) au lieu de la caméra |
 | Cognition | `brain_node` | llm : analyse le texte et image, choisit les actions et les images |
 | Projection | `projection_node` | Affiche le visuel du dessin sur le projecteur HDMI |
 | Passerelle | `gateway_node` | Bridge bi-directionnel ROS 1 ↔ ROS 2 |
@@ -72,7 +74,7 @@ sftp://qtrobot@192.168.100.1/
 
 ```bash
 # Python
-pip install roslibpy openai==0.28 rclpy opencv-python numpy faster-whisper pyaudio
+pip install roslibpy openai==0.28 rclpy opencv-python numpy faster-whisper pyaudio deepfilternet mss
 ```
 
 #### Configuration du Micro 
@@ -104,7 +106,7 @@ L'expérience se lance désormais en deux temps pour garantir que l'utilisateur 
 Terminal 1 : Lancement de l'infrastructure (Launch File)
 
 ```bash
-# Ce fichier lance la Gateway, la Vision (OpenCV), le STT, la Projection, le Brain et le nœud d'Interaction.
+# Ce fichier lance la Gateway, la Vision normal ou temp (à modifier dans le launch), le STT, la Projection, le Brain et le nœud d'Interaction.
 ros2 launch crearobot_brain launch.py
 ```
 
@@ -137,8 +139,9 @@ ros2 run crearobot_brain projection
 # L'audition (micro local)
 ros2 run crearobot_brain stt
 
-# La vision (caméra locale)
+# La vision (caméra locale) ou Mode science Infuse
 ros2 run crearobot_brain vision
+ros2 run crearobot_brain vision_temp 
 ```
 
 ---
@@ -150,7 +153,7 @@ graph TD
     %% Phase d'initialisation
     INTRO[<b>START_INTRO</b><br/>] 
     
-    INTRO -- "OUI / Timeout" --> ICE[<b>START_ICE_BREAKING</b><br/>4 Échanges amicaux<br/><i>Warmup LLM</i>]
+    INTRO -- "Timeout" --> ICE[<b>START_ICE_BREAKING</b><br/>3 Échanges amicaux<br/>]
     
     ICE -- "DONE" --> TASK[<b>START_TASK_INTRO</b><br/>Explication des consignes]
     
@@ -158,17 +161,18 @@ graph TD
 
     %% Cycle itératif
     subgraph "Cycle Principal (MAX_LOOPS Tours)"
-        DRAW["<b>START_DRAWING_X</b><br/>120s | Tête basse (Pitch 20)"]
+        DRAW["<b>START_DRAWING_X</b><br/>(90s)"]
         DRAW --> DECIDE{Tour X = 
-        MAX_LOOPS ?}
+        MAX_LOOPS = 3 ?}
         
-        DECIDE -- "NON" --> FEEDBACK["<b>START_FEEDBACK_X</b><br/>2 Échanges | Tête haute (Pitch 0)"]
+        DECIDE -- "NON" --> FEEDBACK["<b>START_FEEDBACK_X</b><br/>C0 : 1 Phrase de QT
+        C1 : 2 Échanges"]
         FEEDBACK --> INC[Tour + 1]
         INC --> DRAW
     end
 
     %% Phase de clôture
-    DECIDE -- "OUI" --> TITLE["<b>START_TITLE</b><br/>Analyse VLM & Titre final<br/>Tête basse (Pitch 20)"]
+    DECIDE -- "OUI" --> TITLE["<b>START_TITLE</b><br/>Analyse VLM & Titre final<br/>"]
     
     TITLE -- "DONE" --> ENDING["<b>START_ENDING</b><br/>"]
     
@@ -267,8 +271,6 @@ Une valeur de 20.0 est utilisée pour le regard vers le bas (dessin) et 0.0 pour
 
 - [Documentation officielle QTrobot](https://docs.luxai.com/docs/intro_code)
 - [Wiki ROS QTrobot](https://wiki.ros.org/Robots/qtrobot)
-- [Tutoriel Vosk / Python](https://docs.luxai.com/docs/tutorials/python/python_ros_vosk)
-- [Documentation micro ReSpeaker](https://docs.luxai.com/docs/v1/modules/microphone)
 
 ---
 

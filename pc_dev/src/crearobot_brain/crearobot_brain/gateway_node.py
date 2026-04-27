@@ -4,6 +4,7 @@ from std_msgs.msg import String, Bool, Float64MultiArray
 import roslibpy
 import json
 import time
+import os
 
 from .task_synchronizer import TaskSynchronizer
 from . import config
@@ -58,14 +59,37 @@ class GatewayNode(Node):
             self.get_logger().error(f"Erreur config voix : {e}")
 
     def listener_callback(self, msg):
-        """ Reçoit [Geste, Emotion, Texte] et l'exécute sur le robot """
+        """ Reçoit [Geste, Emotion, Texte] et traite le texte seul en priorité """
         try:
             data = json.loads(msg.data)
             geste, emotion, texte = data[0], data[1], data[2]
             
-            self.get_logger().info(f'Action : {geste} | {emotion} | "{texte}"')
+            # Nettoyage des variables
+            has_text = texte and texte.strip() != ""
+            no_geste = not geste or geste.lower() == "none"
+            no_emotion = not emotion or emotion.lower() == "none"
 
-            # Synchronisation des tâches
+            # Texte pur (pas de geste ni d'emotion). Envoi direct sans sync.
+            if has_text and no_geste and no_emotion:
+                self.get_logger().info(f'Direct Talk : "{texte}"')
+                self.talk_srv.call(roslibpy.ServiceRequest({'message': texte}))
+                return
+
+            # Animation pure (pas de texte). On sync pour les gestes, bouche reste fermee.
+            if not has_text:
+                tasks = []
+                if not no_emotion:
+                    tasks.append((0, lambda: self.emotion_srv.call(roslibpy.ServiceRequest({'name': 'QT/' + emotion}))))
+                if not no_geste:
+                    tasks.append((0, lambda: self.gesture_srv.call(roslibpy.ServiceRequest({'name': 'QT/' + geste, 'speed': 0}))))
+                
+                if tasks:
+                    self.get_logger().info("Animation seule (Bouche fermee)")
+                    self.ts.sync(tasks)
+                return
+
+            # Action combinee (Texte + Geste/Emotion). Orchestration complete.
+            self.get_logger().info(f'Action Synchro : {geste} | {emotion} | "{texte}"')
             tasks = [
                 (0, lambda: self.talk_srv.call(roslibpy.ServiceRequest({'message': texte}))),
                 (0, lambda: self.emotion_srv.call(roslibpy.ServiceRequest({'name': 'QT/' + emotion}))),
@@ -74,9 +98,9 @@ class GatewayNode(Node):
             self.ts.sync(tasks)
 
         except Exception as e:
-            # Si c'est juste une chaîne simple, on fait juste parler le robot
-            self.get_logger().warn(f"Format JSON non détecté, exécution texte simple.")
-            self.talk_srv.call(roslibpy.ServiceRequest({'message': msg.data}))
+            # Fallback simple si le format n'est pas bon
+            if msg.data and msg.data.strip() != "":
+                self.talk_srv.call(roslibpy.ServiceRequest({'message': msg.data}))
         
     def head_callback(self, msg):
         """ Reçoit la position [Yaw, Pitch] en ROS 2 et l'envoie au robot en ROS 1 """
@@ -89,12 +113,16 @@ class GatewayNode(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    node = GatewayNode()
+    node = GatewayNode() 
+
     try:
         rclpy.spin(node)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, rclpy.executors.ExternalShutdownException):
         pass
     finally:
-        node.ros1_client.terminate()
-        node.destroy_node()
-        rclpy.shutdown()
+        if rclpy.ok():
+            node.destroy_node()
+            rclpy.shutdown()
+        
+        # Sortie immediate pour eviter la pollution des logs ROS 2
+        os._exit(0)

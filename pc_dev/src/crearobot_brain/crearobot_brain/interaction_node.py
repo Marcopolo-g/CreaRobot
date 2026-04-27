@@ -3,6 +3,9 @@ import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String, Bool, Int32, Float64MultiArray
 import json
+import random
+import os
+
 from . import config
 
 class InteractionNode(Node):
@@ -22,7 +25,6 @@ class InteractionNode(Node):
         # Écoute du transcript pour verrouiller l'interaction
         self.stt_sub = self.create_subscription(String, '/pc/stt/transcript', self.stt_callback, 10)
         
-
         # Parle à la Gateway (pour les gestes et la voix directe)
         self.action_pub = self.create_publisher(String, '/pc/qtaction', 10)
 
@@ -42,18 +44,32 @@ class InteractionNode(Node):
         self.current_cmd = ""
         self.current_tour = 1 
         self.feedback_timer = None
-        self.dialogue_count = 0
+        self.silence_timer = None
         self.photo_timer = None
+        self.animation_timer = None
+        self.dialogue_count = 0
 
 
     def set_stt(self, state):
         msg = Bool()
         msg.data = state
         self.stt_enable_pub.publish(msg)
+        self.get_logger().info(f"--- COMMANDE STT : {'OUVERTURE' if state else 'FERMETURE'} ---")
+        # Si on ouvre le micro, on peut lancer le timer de silence
+        if state:
+            self.reset_silence_timer()
+        else:
+            self.stop_silence_timer()
 
     def execute_phase(self, msg):
-        self.current_cmd = msg.data
+        data = json.loads(msg.data)
+        self.current_cmd = data["phase"]
+        self.current_tour = data["tour"]
+        self.set_stt(False)
         self.is_busy = False
+
+        self.stop_random_animation()
+        self.stop_silence_timer()
 
         if self.feedback_timer:
             self.feedback_timer.cancel()
@@ -61,32 +77,30 @@ class InteractionNode(Node):
         
         if "START_INTRO" in self.current_cmd:
             self.move_head(0, 0)
-            text = "Bonjour ! Je m'appelle QT. Je suis ravi de faire ta connaissance. Es-tu prêt pour notre activité ?"
+            text = "Bonjour ! Je m'appelle Hyppolyte. Je suis ravi de faire ta connaissance. Es-tu prêt pour notre activité ?"
             self.send_robot("hi", "happy", text)
             # On ouvre le micro si besoin pour le "pret/oui"
 
-            duree = self.calculate_speech_duration(text) + 4
+            duree = self.calculate_speech_duration(text) + 5
             self.feedback_timer = self.create_timer(duree, self.finish_feedback_loop)
             
         elif "START_ICE_BREAKING" in self.current_cmd:  
             self.move_head(0, 0)
             self.dialogue_count = 0
 
-            text = "Super ! Avant de commencer, dis-moi, est-ce que tu aimes dessiner d'habitude ?"
+            text = config.ICE_BREAKING_QUESTION
             self.send_robot("happy", "happy", text)
-
-            self.set_stt(True)
             
-            duree = self.calculate_speech_duration(text) 
+            duree = self.calculate_speech_duration(text) + 0.3
             self.feedback_timer = self.create_timer(duree, self.finish_feedback_loop)
             
 
         elif "START_TASK_INTRO" in self.current_cmd:
             self.move_head(0, 0)
-            text = "Je vais te donner une feuille avec des petites formes dessus — et ton objectif, c'est de les utiliser pour faire un dessin. Tu peux dessiner ce que tu veux, comme tu veux. Il n'y a pas de bonne ou de mauvaise réponse. Si tu as fini le dessin avant la fin du temps, tu peux dire que tu as fini. Es-tu prêt ?"
-            self.send_robot("talk", "neutral", text)
+            text = "Enfin, assez avec mes questions, revenons à notre activité. Je vais te donner une feuille avec des petites formes dessus. \pau=100\ Ton objectif, c'est de les utiliser pour faire un dessin. \pau=200\ Il n'y a pas de bonne ou de mauvaise réponse. \pau=300\ Si tu as fini avant la fin du temps, tu peux me le dire. \pau=200\ Es-tu prêt ?"            
+            self.send_robot("None", "None", text)
             # C'est un monologue, on envoie DONE à la fin du temps de parole
-            duree = self.calculate_speech_duration(text) + 3
+            duree = self.calculate_speech_duration(text) + 5.5
             self.feedback_timer = self.create_timer(duree, self.finish_feedback_loop)
 
         elif "START_DRAWING" in self.current_cmd:
@@ -94,12 +108,17 @@ class InteractionNode(Node):
 
             # ----------- A MODIFIER -------------------------------------------------
             if self.current_tour == 1:
-                self.send_robot("curious", "neutral", "C’est parti !")
+                self.send_robot("curious", "None", "C’est parti pour le dessin !")
             elif self.current_tour == 2:
-                self.send_robot("challenge", "neutral", "C’est parti pour la suite !")
+                self.send_robot("challenge", "None", "Reprenons le dessin !")
             elif self.current_tour == 3:
-                self.send_robot("curious", "neutral_state_blinking", "Continue !")
+                self.send_robot("challenge", "None", "Dernière modification de ton dessin !")
+            #elif self.current_tour == 4:
+            #    self.send_robot("curious", "neutral_state_blinking", "Continue !")
             self.set_stt(True) # On ouvre pour detecter le "j'ai fini"
+
+            # Pour generer des animations durant la phase de dessin
+            self.schedule_random_animation()
             
         elif "START_FEEDBACK" in self.current_cmd:
             self.move_head(0, 0)
@@ -114,7 +133,7 @@ class InteractionNode(Node):
             
             self.set_stt(False)
             # On déclenche la photo après la phrase
-            wait_time = self.calculate_speech_duration(text) + 2
+            wait_time = self.calculate_speech_duration(text) + 2.5
             if self.photo_timer: self.photo_timer.cancel()
             self.photo_timer = self.create_timer(wait_time, self.send_camera_trigger)
             
@@ -129,11 +148,11 @@ class InteractionNode(Node):
 
         if config.CONDITION == "C0":
             if self.current_tour == 1:
-                text = config.FEEDBACK_C0_1
+                text = random.choice(config.FEEDBACK_C0_1)
                 self.send_robot("happy", "happy", text)
                 
             elif self.current_tour == 2:
-                text = config.FEEDBACK_C0_2
+                text = random.choice(config.FEEDBACK_C0_2)
                 self.send_robot("surprise", "surprise", text)
             
             else:
@@ -142,17 +161,20 @@ class InteractionNode(Node):
             # On calcule dynamiquement le temps de parole
             if self.feedback_timer: self.feedback_timer.cancel()
             duree = self.calculate_speech_duration(text)
-            self.create_timer(duree, self.finish_feedback_loop)
+            self.feedback_timer = self.create_timer(duree, self.finish_feedback_loop)
             
         elif config.CONDITION == "C1":
             if self.current_tour == 1:
-                self.send_robot("happy", "happy", "Oh, laisse-moi regarder ton dessin… Recule un petit peu pour que la caméra puisse bien voir ton dessin.")
+                self.send_robot("happy", "happy", "Oh, Faisons une pause dans le dessin que je puisse regarder. Recule un petit peu pour que la caméra puisse bien le voir.")
             elif self.current_tour == 2:
-                self.send_robot("surprise", "surprise", "Je peux voir où tu en es ? Recule un petit peu pour que la caméra puisse bien voir ton dessin.")
-
+                self.send_robot("surprise", "surprise", "Refaisons une pause. Je peux voir où tu en es ? Recule un petit peu pour que la caméra puisse bien voir ton dessin.")
+            elif self.current_tour == 3:
+                self.send_robot("happy", "happy", "J'aimerais beaucoup voir tes dernières touches ! Est-ce que tu peux montrer ton dessin à la caméra une dernière fois pour que je puisse l'admirer ?")
+            #elif self.current_tour == 4:
+            #    self.send_robot("curious", "neutral", "Je suis curieux de voir tout ce que tu as ajouté ! Tu peux reculer un petit peu pour que je voie bien tes progrès ?")
             self.set_stt(False) # On coupe pendant l'analyse vision
 
-            wait_time = self.calculate_speech_duration(text) + 4
+            wait_time = self.calculate_speech_duration(text) + 7
 
             if self.photo_timer:
                 self.photo_timer.cancel()
@@ -191,20 +213,20 @@ class InteractionNode(Node):
         self.feedback_timer = self.create_timer(duree, self.finish_feedback_loop) 
            
     def calculate_speech_duration(self, text):
-        # Estimation : 0.08s par caractere + une marge de securite
-        return (len(text) * 0.08) + 1
+        # Estimation : 0.074s par caractere + une marge de securite
+        return (len(text) * 0.074) + 0.4
 
     def stt_callback(self, msg):
         if self.is_busy:
             return
         
-        if "START_FEEDBACK" in self.current_cmd:
+        self.stop_silence_timer()
+
+        if "START_FEEDBACK" in self.current_cmd or "START_ICE_BREAKING" in self.current_cmd:
             self.is_busy = True
             self.set_stt(False)
             self.get_logger().info(f"Dialogue Feedback verrouillé pour : {msg.data}")
         else:
-            # En INTRO ou DRAWING, on se contente de logger, sans rien couper.
-            # L'Orchestrateur recevra aussi le message et fera son travail de son côté.
             self.get_logger().info(f"Audio capté (Phase {self.current_cmd}) : {msg.data}")
 
 
@@ -217,7 +239,8 @@ class InteractionNode(Node):
         self.is_busy = False
 
         if "START_INTRO" in self.current_cmd:
-            self.loop_done_pub.publish(String(data="DONE"))
+            self.loop_done_pub.publish(String(data=f"DONE:{self.current_cmd}"))
+            self.set_stt(True)
 
         # --- LOGIQUE DE SORTIE POUR ICE_BREAKING ET FEEDBACK ---
         elif "START_ICE_BREAKING" in self.current_cmd:
@@ -225,25 +248,34 @@ class InteractionNode(Node):
                 self.set_stt(True)
                 self.get_logger().info("Ice Breaking : On continue la discussion.")
             else:
-                self.get_logger().info("Ice Breaking fini. Envoi de DONE.")
-                self.loop_done_pub.publish(String(data="DONE"))
+                self.stop_silence_timer()
+                self.set_stt(False)
+                self.loop_done_pub.publish(String(data=f"DONE:{self.current_cmd}"))
 
         elif "START_TASK_INTRO" in self.current_cmd:
-            self.loop_done_pub.publish(String(data="DONE"))
+            self.loop_done_pub.publish(String(data=f"DONE:{self.current_cmd}"))
+            self.set_stt(False)
 
+        elif "START_DRAWING" in self.current_cmd:
+            # On ouvre pour détecter si l'utilisateur dit "J'ai fini"
+            self.set_stt(True)
         
         # Sortie du Feedback classique (C0 ou C1)
         elif "START_FEEDBACK" in self.current_cmd:
             if config.CONDITION == "C0":
-                self.loop_done_pub.publish(String(data="DONE"))
+                self.loop_done_pub.publish(String(data=f"DONE:{self.current_cmd}"))
+
             elif config.CONDITION == "C1":
                 if self.dialogue_count < config.MAX_EXCHANGES:
                     self.set_stt(True)
                 else:
-                    self.loop_done_pub.publish(String(data="DONE"))
+                    self.stop_silence_timer()
+                    self.loop_done_pub.publish(String(data=f"DONE:{self.current_cmd}"))
+
             
         elif "START_TITLE" in self.current_cmd:
-            self.loop_done_pub.publish(String(data="DONE"))
+            self.loop_done_pub.publish(String(data=f"DONE:{self.current_cmd}"))
+
 
 
     def say_goodbye_final(self):
@@ -271,16 +303,93 @@ class InteractionNode(Node):
         self.head_pub.publish(msg)
         self.get_logger().info(f"Mouvement tête : Yaw={yaw}, Pitch={pitch}")
 
+    def stop_silence_timer(self):
+        """ Arrête proprement le timer de relance """
+        if self.silence_timer:
+            self.silence_timer.cancel()
+            self.silence_timer = None
+        
+    def reset_silence_timer(self):
+        """ Lance le timer de 10s seulement si on est en discussion active """
+        self.stop_silence_timer()
+        # On n'active la relance que si on attend vraiment une réponse
+        is_dialogue = "START_FEEDBACK" in self.current_cmd or "START_ICE_BREAKING" in self.current_cmd
+        
+        if is_dialogue and not self.is_busy:
+            # En C0, on ne veut pas de relance de silence
+            if "START_FEEDBACK" in self.current_cmd and config.CONDITION == "C0":
+                return
+                
+            self.silence_timer = self.create_timer(15.0, self.prompt_user_silence)
+    
+    def schedule_random_animation(self):
+        """ Planifie la prochaine animation avec un delai aleatoire """
+        self.stop_random_animation()
+        wait_time = random.uniform(40.0, 80.0)
+        self.animation_timer = self.create_timer(wait_time, self.do_random_animation)
+    
+    def do_random_animation(self):
+        self.stop_random_animation()
+
+        # On n'anime que si le robot ne fait rien d'autre
+        if not self.is_busy and "START_DRAWING" in self.current_cmd:
+            # Liste des gestes disponibles
+            gestures = ["curious", "bored", "head_scratch"]
+          
+            self.send_robot(random.choice(gestures), "None", "")
+            
+            def reset_head_cb():
+                # On détruit le timer immédiatement pour qu'il ne tourne qu'une fois
+                if hasattr(self, 'reset_timer') and self.reset_timer:
+                    self.reset_timer.destroy()
+                    self.reset_timer = None
+                
+                # Action de retour au dessin
+                if "START_DRAWING" in self.current_cmd and not self.is_busy:
+                    self.move_head(0, 20)
+                    self.get_logger().info("Tête de retour sur le dessin.")
+
+            # On stocke le timer pour pouvoir le détruire proprement
+            self.reset_timer = self.create_timer(4.0, reset_head_cb)
+
+        # Replanification du prochain cycle aléatoire (40-80s)
+        if "START_DRAWING" in self.current_cmd:
+            self.schedule_random_animation()
+
+    def stop_random_animation(self):
+        """ Arrete proprement le timer d'animation """
+        if self.animation_timer:
+            self.animation_timer.cancel()
+            self.animation_timer = None
+
+    def prompt_user_silence(self):
+        """ QT fait une petite relance car l'utilisateur ne dit rien """
+        self.stop_silence_timer()
+        
+        # On ne relance que si le robot n'est pas déjà en train de parler
+        if not self.is_busy:
+            self.set_stt(False)
+            text = config.FOLLOW_UP_QUESTION
+            self.send_robot("None", "None", text)
+            
+            # On bloque le micro le temps de la relance
+            self.is_busy = True
+            duree = self.calculate_speech_duration(text)
+            self.feedback_timer = self.create_timer(duree, self.finish_feedback_loop)
+
 def main(args=None):
     rclpy.init(args=args)
-    node = InteractionNode()
+    node = InteractionNode() 
+
     try:
         rclpy.spin(node)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, rclpy.executors.ExternalShutdownException):
         pass
     finally:
-        node.destroy_node()
-        rclpy.shutdown()
-
-if __name__ == '__main__':
-    main()
+        # Nettoyage rapide du noeud
+        if rclpy.ok():
+            node.destroy_node()
+            rclpy.shutdown()
+        
+        # Sortie immediate pour eviter la pollution des logs ROS 2
+        os._exit(0)

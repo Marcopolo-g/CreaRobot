@@ -21,13 +21,23 @@ def generate_launch_description():
         output='screen'
     )
 
-    # Vision (Capture Caméra + Analyse IA)
+    # Vision (Capture Caméra)
     vision = Node(
         package='crearobot_brain',
         executable='vision',
         name='vision_node',
         output='screen'
     )
+
+    
+    # Vision (Capture Caméra) Semaine science infuse
+    vision_temp = Node(
+        package='crearobot_brain',
+        executable='vision_temp',
+        name='vision_node_temp',
+        output='screen'
+    )
+    
 
     # STT (Oreilles - Micro USB)
     stt = Node(
@@ -53,7 +63,7 @@ def generate_launch_description():
         output='screen'
     )
 
-    nodes_to_run = [gateway, vision, stt, interaction, brain]
+    nodes_to_run = [gateway, stt, interaction, brain, vision_temp]
 
     if config.CONDITION == "C2":
         nodes_to_run.append(projection)
