@@ -8,4 +8,16 @@ config.py
 
 .vscode/
 
+# Image du dessin
 last_picture.jpg
+
+# Latex
+*.aux
+*.fdb_latexmk
+*.fls
+*.lof
+*.log
+*.lot
+*.out
+*.toc
+*.synctex.gz
