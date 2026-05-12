@@ -46,7 +46,7 @@ print(ds_series)
 
 
 # Graphique (4 panels)
-fig, axes = plt.subplots(1, 4, figsize=(22, 5))
+fig, axes = plt.subplots(1, 3, figsize=(22, 5))
 fig.suptitle("Analyse des critères de scoring", fontsize=13, fontweight="bold")
 
 
@@ -86,7 +86,7 @@ ax2.spines[["top", "right"]].set_visible(False)
 
 # Panel 3 : Cohen's d par critère
 # Un d positif = C1 > C0, négatif = C0 > C1
-ax4 = axes[3]
+ax4 = axes[2]
 ds_triees  = ds_series.sort_values()
 couleurs_d = ["#DE4503" if v >= 0 else "#438FD2" for v in ds_triees]
 ax4.barh(ds_triees.index, ds_triees.values, color=couleurs_d, alpha=0.8)
