@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 
 
 # Chargement
-df = pd.read_csv("scores_tctdp.csv").dropna(subset=["Total"])
+df = pd.read_csv("../scores_tctdp.csv").dropna(subset=["Total"])
 
 ordre   = ["Jeune enfant", "Enfant", "Adolescent", "Adulte"]
 couleurs = {"C0": "#438FD2", "C1": "#DE4503"}
@@ -109,5 +109,5 @@ ax2.grid(axis="y", alpha=0.3)
 ax2.spines[["top", "right"]].set_visible(False)
  
 plt.tight_layout()
-plt.savefig("scores_par_age.png", dpi=150, bbox_inches="tight")
+plt.savefig("../figures/scores_par_age.png", dpi=150, bbox_inches="tight")
 plt.close()

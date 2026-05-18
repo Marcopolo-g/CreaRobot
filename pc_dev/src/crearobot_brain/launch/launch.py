@@ -63,7 +63,7 @@ def generate_launch_description():
         output='screen'
     )
 
-    nodes_to_run = [gateway, stt, interaction, brain, vision_temp]
+    nodes_to_run = [gateway, stt, interaction, brain, vision]
 
     if config.CONDITION == "C2":
         nodes_to_run.append(projection)

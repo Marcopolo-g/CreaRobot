@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 
 # Chargement 
 # On lit le CSV et on supprime P31 qui n'a pas de score Total
-df = pd.read_csv("scores_tctdp.csv").dropna(subset=["Total"])
+df = pd.read_csv("../scores_tctdp.csv").dropna(subset=["Total"])
 
 # On sépare les deux groupes
 C0 = df[df["Condition"] == "C0"]["Total"]
@@ -146,5 +146,5 @@ ax.set_title("T-test de Welch : C0 vs C1", fontsize=12)
 ax.grid(alpha=0.3)
 
 plt.tight_layout()
-plt.savefig("ttest.png", dpi=150, bbox_inches="tight")
+plt.savefig("../figures/ttest.png", dpi=150, bbox_inches="tight")
 plt.close()

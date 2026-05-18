@@ -5,7 +5,7 @@ from scipy import stats
 
 
 # Chargement
-df = pd.read_csv("scores_tctdp.csv").dropna(subset=["Total"])
+df = pd.read_csv("../scores_tctdp.csv").dropna(subset=["Total"])
 
 CRITERES = ["Cn", "Cm", "Ne", "Cl", "Cth", "Bfd", "Bfi", "Pe", "Hu", "Uc_b", "Uc_c", "Uc_d"]
 couleurs  = {"C0": "#438FD2", "C1": "#DE4503"}
@@ -104,5 +104,5 @@ ax4.text(0.82, -0.7, "grand", fontsize=7, color="#999")
 
 
 plt.tight_layout()
-plt.savefig("criteres_scoring.png", dpi=150, bbox_inches="tight")
+plt.savefig("../figures/criteres_scoring.png", dpi=150, bbox_inches="tight")
 plt.close()

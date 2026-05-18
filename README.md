@@ -265,6 +265,49 @@ Une valeur de 20.0 est utilisée pour le regard vers le bas (dessin) et 0.0 pour
 | `test_gpt.py` | Validation du format JSON et du respect des listes de gestes |
 | `bridge_client_cam.py` | Affichage du flux vidéo du robot en temps réel sur la tablette du robot |
 
+## Stats
+
+Les analyses portent sur les scores TCT-DP (Urban, 1991) collectés lors de la passation. Deux conditions sont comparées : **C0** (robot sans LLM) et **C1** (robot avec LLM). Les adolescents et adultes sont exclus des analyses par tranche d'âge (effectifs trop faibles).
+
+### Données
+
+`scores_tctdp.csv` — colonnes : `Participant`, `Condition` (C0/C1), `Tranche_age`, 12 critères TCT-DP (`Cn`, `Cm`, `Ne`, `Cl`, `Cth`, `Bfd`, `Bfi`, `Pe`, `Hu`, `Uc_b`, `Uc_c`, `Uc_d`), `Total`.
+
+| Tranche d'âge | C0 | C1 |
+|---|---|---|
+| Enfant | 20 | 17 |
+| Jeune enfant | 5 | 5 |
+| Adolescent | 1 | 1 |
+| Adulte | 0 | 3 |
+
+### Scripts (`stats/scripts/`)
+
+| Script | Description |
+|---|---|
+| `t_test.py` | T-test de Welch C0 vs C1 sur le score total (tous participants, retrait outliers \|z\|>2.5) |
+| `criteres_scoring.py` | T-test et Cohen's d par critère TCT-DP (tous participants) |
+| `scores_par_age.py` | Distribution des scores par tranche d'âge |
+| `analyse_age.py` | T-tests C0 vs C1 stratifiés par tranche d'âge (Enfant seul, Jeune enfant seul, combiné) |
+| `analyse_criteres_ponderes.py` | Scores alternatifs : pondéré (poids ∝ Cohen's d) et restreint aux critères significatifs - calculés sur Enfant + Jeune enfant uniquement |
+| `analyse_anova2.py` | ANOVA à deux facteurs (Condition × Tranche_age) pour tester si l'effet de C1 est confondant avec l'âge |
+
+Lancer un script depuis `stats/scripts/` :
+```bash
+python3 nom_script.py
+```
+
+### Figures (`stats/figures/`)
+
+| Fichier | Généré par |
+|---|---|
+| `ttest.png` | `t_test.py` |
+| `criteres_scoring.png` | `criteres_scoring.py` |
+| `scores_par_age.png` | `scores_par_age.py` |
+| `analyse_age.png` | `analyse_age.py` |
+| `criteres_ponderes.png` | `analyse_criteres_ponderes.py` |
+| `criteres_cohens_d.png` | `analyse_criteres_ponderes.py` |
+| `anova2.png` | `analyse_anova2.py` |
+
 ---
 
 ## Sources
