@@ -8,38 +8,18 @@
 
 Pour garantir une interaction fluide, tous les capteurs (micro, caméra) sont branchés directement sur le PC. La Gateway ne sert plus qu'à envoyer les commandes motrices et vocales au robot.
 
-```
-┌────────────────────────────────────────────────────────────────┐
-│                          PC (ROS 2)                            │
-│  orchestator_node                                              │
-|         ↓                                                      │
-│ interaction_node → vision_node      ←  [Caméra USB]            |
-|                 ou vision_node_temp ←  [Caméra Ecran HDMI]     |
-|                  → stt_node         ←  [Micro USB]             |     
-|                  → projection_node  ←  [Projecteur HDMI]       | 
-|                  → brain_node       ←  [ChatGPT]               |
-|                                                                |
-|                         ↓↑                                     |
-│                    gateway_node                                │
-└──────────────────────────┬─────────────────────────────────────┘
-                           │ WebSocket (rosbridge :9090)
-┌──────────────────────────┴─────────────────────────────────────┐
-│                   QTRobot (ROS 1)                              │
-│                                                                │
-│      Moteurs (Gestes)  ·  Écran (Émotions)  ·  TTS (Parole)    │
-└────────────────────────────────────────────────────────────────┘
-```
+![Architecture du système CreaRobot](docs/figures/Architecture%20syst%C3%A8me%20CreaRobot.png)
 
 | Couche | Node | Rôle |
 |---|---|---|
-| Logique | `orchestrator_node` | Machine à états — 5 phases TCT-DP |
-| Dispatcher | `interaction_node` | Traduit les phases en actions et en gestes / émotions / paroles |
-| Audition | `stt_node` | Capture micro local +  STT local (Faster-Whisper)|
+| Logique | `orchestrator_node` | Machine à états — 7 phases TCT-DP |
+| Dispatcher | `interaction_node` | Traduit les phases en actions (gestes / émotions / parole) |
+| Audition | `stt_node` | Capture micro local + STT local (Faster-Whisper) |
 | Vision | `vision_node` | Flux local via caméra USB externe |
-| Vision démo | `vision_node_temp` | Mode Science Infuse : Capture l'écran HDMI (via mss) au lieu de la caméra |
-| Cognition | `brain_node` | llm : analyse le texte et image, choisit les actions et les images |
-| Projection | `projection_node` | Affiche le visuel du dessin sur le projecteur HDMI |
-| Passerelle | `gateway_node` | Bridge bi-directionnel ROS 1 ↔ ROS 2 |
+| Vision démo | `vision_node_temp` | Mode Science Infuse : capture d'écran HDMI (via mss) |
+| Cognition | `brain_node` | LLM/VLM : analyse texte et image, génère les réponses |
+| Projection | `projection_node` | Affiche le visuel du dessin sur le projecteur HDMI (C2) |
+| Passerelle | `gateway_node` | Bridge ROS 1 ↔ ROS 2 via WebSocket (rosbridge :9090) |
 
 ---
 
@@ -73,21 +53,20 @@ sftp://qtrobot@192.168.100.1/
 #### Dépendances
 
 ```bash
-# Python
 pip install roslibpy openai==0.28 rclpy opencv-python numpy faster-whisper pyaudio deepfilternet mss
 ```
 
-#### Configuration du Micro 
+#### Configuration du Micro
 
-Pour que le stt_node fonctionne, votre microphone USB doit être défini comme périphérique par défaut sur le système Linux.
+Pour que le stt_node fonctionne, votre microphone USB doit être défini comme périphérique par défaut.
 
-Listez vos sources : ```pactl list short sources```
-
-Définissez la source audio par défaut avec la commande suivante (remplacez la partie entre guillemets par le nom de votre périphérique trouvé) :
+Listez vos sources : `pactl list short sources`
 
 ```bash
-pactl set-default-source ”NOM_DU_PERIPHERIQUE”
+pactl set-default-source "NOM_DU_PERIPHERIQUE"
 ```
+
+---
 
 ## Mise en route
 
@@ -99,49 +78,31 @@ Activer dans l'autostart ros_bridge et motor :
 
 ### 2. Côté PC - ROS 2
 
-#### Première méthode de lancement
+#### Méthode principale (recommandée)
 
-L'expérience se lance désormais en deux temps pour garantir que l'utilisateur garde le contrôle clavier sur l'orchestration.
-
-Terminal 1 : Lancement de l'infrastructure (Launch File)
+Terminal 1 — Infrastructure :
 
 ```bash
-# Ce fichier lance la Gateway, la Vision normal ou temp (à modifier dans le launch), le STT, la Projection, le Brain et le nœud d'Interaction.
 ros2 launch crearobot_brain launch.py
 ```
 
-Terminal 2 : Pilote de l'expérience
+Terminal 2 — Pilote de l'expérience :
 
 ```bash
-# À lancer une fois que le Terminal 1 affiche que tous les noeuds se sont bien lancés sans erreur.
 ros2 run crearobot_brain orchestrator
 ```
 
-#### Seconde méthode de lancement 
-Lancer tous les noeuds indépendemment :
+#### Méthode alternative (noeuds séparés)
 
 ```bash
-# Interaction : Gère les phases, activation des nodes 
 ros2 run crearobot_brain interaction
-
-# Orchestrateur de l'expérience
 ros2 run crearobot_brain orchestrator
-
-# Cerveau LLM 
 ros2 run crearobot_brain brain
-
-# La passerelle de commande
 ros2 run crearobot_brain gateway
-
-# Le système de projection
 ros2 run crearobot_brain projection
-
-# L'audition (micro local)
 ros2 run crearobot_brain stt
-
-# La vision (caméra locale) ou Mode science Infuse
-ros2 run crearobot_brain vision
-ros2 run crearobot_brain vision_temp 
+ros2 run crearobot_brain vision        # caméra USB
+ros2 run crearobot_brain vision_temp   # capture écran HDMI
 ```
 
 ---
@@ -150,149 +111,139 @@ ros2 run crearobot_brain vision_temp
 
 ```mermaid
 graph TD
-    %% Phase d'initialisation
-    INTRO[<b>START_INTRO</b><br/>] 
-    
-    INTRO -- "Timeout" --> ICE[<b>START_ICE_BREAKING</b><br/>3 Échanges amicaux<br/>]
-    
+    INTRO[<b>START_INTRO</b><br/>Accueil du participant]
+
+    INTRO -- "Timeout" --> ICE[<b>START_ICE_BREAKING</b><br/>3 échanges amicaux]
+
     ICE -- "DONE" --> TASK[<b>START_TASK_INTRO</b><br/>Explication des consignes]
-    
+
     TASK -- "Timeout" --> DRAW
 
-    %% Cycle itératif
     subgraph "Cycle Principal (MAX_LOOPS Tours)"
         DRAW["<b>START_DRAWING_X</b><br/>(90s)"]
-        DRAW --> DECIDE{Tour X = 
+        DRAW --> DECIDE{Tour X =
         MAX_LOOPS = 3 ?}
-        
-        DECIDE -- "NON" --> FEEDBACK["<b>START_FEEDBACK_X</b><br/>C0 : 1 Phrase de QT
-        C1 : 2 Échanges"]
+
+        DECIDE -- "NON" --> FEEDBACK["<b>START_FEEDBACK_X</b><br/>C0 : 1 phrase neutre
+        C1 : 2 échanges VLM"]
         FEEDBACK --> INC[Tour + 1]
         INC --> DRAW
     end
 
-    %% Phase de clôture
-    DECIDE -- "OUI" --> TITLE["<b>START_TITLE</b><br/>Analyse VLM & Titre final<br/>"]
-    
-    TITLE -- "DONE" --> ENDING["<b>START_ENDING</b><br/>"]
-    
+    DECIDE -- "OUI" --> TITLE["<b>START_TITLE</b><br/>Analyse VLM & Titre final"]
 
-    %% Styles de couleurs pour la clarté du README
-    style INTRO fill:#f9f,stroke:#333, color:#000
-    style ICE fill:#fff4dd,stroke:#333, color:#000
-    style TASK fill:#e1f5fe,stroke:#333, color:#000
-    style DRAW fill:#bbf,stroke:#333, color:#000
-    style FEEDBACK fill:#bfb,stroke:#333, color:#000
-    style TITLE fill:#d1c4e9,stroke:#333, color:#000
-    style ENDING fill:#fbb,stroke:#333, color:#000
+    TITLE -- "DONE" --> ENDING["<b>START_ENDING</b><br/>Au revoir"]
+
+    style INTRO fill:#f9f,stroke:#333,color:#000
+    style ICE fill:#fff4dd,stroke:#333,color:#000
+    style TASK fill:#e1f5fe,stroke:#333,color:#000
+    style DRAW fill:#bbf,stroke:#333,color:#000
+    style FEEDBACK fill:#bfb,stroke:#333,color:#000
+    style TITLE fill:#d1c4e9,stroke:#333,color:#000
+    style ENDING fill:#fbb,stroke:#333,color:#000
 ```
-
-
 
 ### Détail des phases
 
 | Phase | Commande | Description |
 |---|---|---|
-| Introduction | `START_INTRO` | Accueil du participant |
-| Dessin (×3) | `START_DRAWING_X` | 180s de dessin, tête inclinée (Pitch 20) |
-| Feedback (×2) | `START_FEEDBACK_X` | 4 échanges VLM + Chat, tête droite (Pitch 0) |
-| Conclusion | `START_ENDING` | Fin de l'expérience |
+| Introduction | `START_INTRO` | Accueil du participant, présentation du robot |
+| Ice Breaking | `START_ICE_BREAKING` | 3 échanges amicaux pilotés par le LLM |
+| Consignes | `START_TASK_INTRO` | Explication de l'activité TCT-DP |
+| Dessin (×3) | `START_DRAWING_X` | 90s de dessin, tête inclinée vers le dessin (Pitch 20) |
+| Feedback (×2) | `START_FEEDBACK_X` | C0 : phrase neutre / C1 : 2 échanges VLM + Chat |
+| Titre | `START_TITLE` | Analyse VLM finale, génération d'un titre pour le dessin |
+| Conclusion | `START_ENDING` | Au revoir et fin de l'expérience |
 
+---
 
 ## Fonctionnalités clés
 
 ### Synchronisation parfaite (lipsync)
 
 La classe `TaskSynchronizer` (basée sur `asyncio`) déclenche simultanément :
-
 - le geste (ROS Service)
 - l'expression faciale (ROS Service)
 - la parole (TTS)
 
-Un correctif dynamique soustrait le temps de chargement de l'émotion à la durée d'animation de la bouche pour éviter qu'elle ne bouge dans le vide après la fin de la parole.
+Un correctif dynamique soustrait le temps de chargement de l'émotion à la durée d'animation de la bouche.
 
 ### Vision & projection
 
-Le `camera_node` récupère un flux local à 60 FPS sans saturer le WiFi. Le `projection_node` utilise OpenCV pour mapper une fenêtre plein écran sur la sortie HDMI du projecteur, permettant à QT d'afficher la suggestion du dessin pour la conodition C2.
+Le `vision_node` récupère un flux local via caméra USB. Le `projection_node` utilise OpenCV pour mapper une fenêtre plein écran sur la sortie HDMI du projecteur (condition C2).
 
 ### Audition déportée - STT
 
-#### Type de STT
-
-Le nœud stt_node embarque Faster-Whisper en local (modèle Base). Cela permet de supprimer la latence réseau.
-Pour garantir une interaction cohérente, le nœud d'audition n'est plus en "écoute libre" permanente. Il est désormais piloté par le topic /pc/stt/enable (Bool).
+Le nœud `stt_node` embarque Faster-Whisper en local (modèle Base). Il est piloté par le topic `/pc/stt/enable` (Bool).
 
 #### Verrouillage micro (Half-Duplex)
 
-Pour éviter que QT ne s'écoute parler et ne génère des réponses infinies avec l'IA, un système de verrouillage Half-Duplex est implémenté :
-- Dès que QT commence une phrase, le flag is_busy passe à True.
-- Le micro est instantanément coupé (set_stt(False)).
-- Le micro n'est réactivé qu'une fois la durée théorique de la phrase écoulée (calculée dynamiquement selon la longueur du texte).
+Pour éviter que QT ne s'écoute parler :
+- Dès que QT commence une phrase, `is_busy` passe à `True`
+- Le micro est coupé (`set_stt(False)`)
+- Il n'est réactivé qu'une fois la durée théorique de la phrase écoulée
 
-### Intelligence artificielle — LLM
+### Intelligence artificielle : LLM/VLM
 
-- **Analyse Multimodale** : Utilisation de GPT-4o-mini pour croiser les données visuelles (évolution du dessin) et les transcriptions auditives (STT).
+- **Analyse multimodale** : GPT-4o-mini croise données visuelles (dessin) et transcriptions STT
+- **Mémoire cumulative** : description textuelle du dessin enrichie à chaque analyse, sans retraiter les pixels
 
-- **Mémoire Cumulative** : Le système maintient une "mémoire visuelle" textuelle qui s'enrichit à chaque analyse d'image, permettant au robot de comprendre la progression du dessin sans re-traiter l'intégralité des pixels.
+### Mouvements de tête dynamiques
 
-### Mouvements de tête dynamique
-
-#### Engagement social et attention conjointe
-
-Afin de renforcer l'engagement social, QT adapte sa posture :
-
-- **Phase Dessin** : QT incline la tête vers le bas (HeadPitch) pour simuler une attention conjointe sur la feuille.
-
-- **Phase Feedback** : QT redresse la tête pour établir un contact visuel avec l'utilisateur pendant la discussion.
-
-#### Contrôle des Actuateurs
-
-Le contrôle des moteurs est géré via le topic /qt_robot/head_position/command.
-
-L'angle de Pitch (inclinaison) est modulé en fonction des phases de la machine à états (orchestrator_node).
-
-Une valeur de 20.0 est utilisée pour le regard vers le bas (dessin) et 0.0 pour le regard horizontal (interaction).
+- **Phase Dessin** : tête inclinée vers le bas (HeadPitch = 20) - attention conjointe sur la feuille
+- **Phase Feedback / Ice Breaking** : tête droite (HeadPitch = 0) - contact visuel avec le participant
 
 ---
 
 ## Tests
 
-### Dans le fichier tests
-
 | Fichier | Description |
 |---|---|
-| `client_bridge.py` | Test de la gateway, communication entre le robot et le pc |
-| `test_gpt.py` | Validation du format JSON et du respect des listes de gestes |
-| `bridge_client_cam.py` | Affichage du flux vidéo du robot en temps réel sur la tablette du robot |
+| `client_bridge.py` | Test de la gateway, communication robot ↔ PC |
+| `test_gpt.py` | Validation du format JSON et du respect des listes de gestes/émotions |
+| `bridge_client_cam.py` | Affichage du flux vidéo du robot en temps réel |
+| `test_sound_treating.py` | Test du pipeline audio : capture micro + transcription Faster-Whisper |
+
+
+---
 
 ## Stats
 
-Les analyses portent sur les scores TCT-DP (Urban, 1991) collectés lors de la passation. Deux conditions sont comparées : **C0** (robot sans LLM) et **C1** (robot avec LLM). Les adolescents et adultes sont exclus des analyses par tranche d'âge (effectifs trop faibles).
+Les analyses portent sur les scores TCT-DP (Urban, 1991) collectés lors de la passation pilote (Science Infuse). Deux conditions sont comparées : **C0** (feedback neutre) et **C1** (feedback LLM/VLM). Les Adultes sont exclus de toutes les analyses (N=3, groupe déséquilibré).
+
+### Normalisation
+
+Tous les critères TCT-DP sont normalisés sur leur score maximum avant analyse :
+`Cn, Cm, Ne, Cl, Cth, Pe /6` · `Bfd, Bfi, Hu /3` · `Uc_b, Uc_c, Uc_d /2`
+
+Le score total normalisé est la somme des 12 critères normalisés → **max = 12**.
 
 ### Données
 
-`scores_tctdp.csv` — colonnes : `Participant`, `Condition` (C0/C1), `Tranche_age`, 12 critères TCT-DP (`Cn`, `Cm`, `Ne`, `Cl`, `Cth`, `Bfd`, `Bfi`, `Pe`, `Hu`, `Uc_b`, `Uc_c`, `Uc_d`), `Total`.
+`scores_tctdp.csv` — colonnes : `Participant`, `Condition` (C0/C1), `Tranche_age`, 12 critères TCT-DP, `Total`.
 
-| Tranche d'âge | C0 | C1 |
-|---|---|---|
-| Enfant | 20 | 17 |
-| Jeune enfant | 5 | 5 |
-| Adolescent | 1 | 1 |
-| Adulte | 0 | 3 |
+| Tranche d'âge | C0 | C1 | Inclus |
+|---|---|---|---|
+| Enfant | 20 | 17 | ✓ |
+| Jeune enfant | 5 | 5 | ✓ |
+| Adolescent | 1 | 1 | ✓ |
+| Adulte | 0 | 3 | ✗ |
+
+Finalement, aucune analyse par tranche d'âge n'a pu être réalisée en raison d'effectifs trop faibles et déséquilibrés.
 
 ### Scripts (`stats/scripts/`)
 
 | Script | Description |
 |---|---|
-| `t_test.py` | T-test de Welch C0 vs C1 sur le score total (tous participants, retrait outliers \|z\|>2.5) |
-| `criteres_scoring.py` | T-test et Cohen's d par critère TCT-DP (tous participants) |
-| `scores_par_age.py` | Distribution des scores par tranche d'âge |
-| `analyse_age.py` | T-tests C0 vs C1 stratifiés par tranche d'âge (Enfant seul, Jeune enfant seul, combiné) |
-| `analyse_criteres_ponderes.py` | Scores alternatifs : pondéré (poids ∝ Cohen's d) et restreint aux critères significatifs - calculés sur Enfant + Jeune enfant uniquement |
-| `analyse_anova2.py` | ANOVA à deux facteurs (Condition × Tranche_age) pour tester si l'effet de C1 est confondant avec l'âge |
+| `t_test.py` | T-test de Welch C0 vs C1 sur le score total normalisé (/12), retrait outliers |
+| `criteres_scoring.py` | Cohen's d et moyennes normalisées par critère TCT-DP (C0 vs C1) |
+| `analyse_criteres_ponderes.py` | T-tests par critère + score restreint (somme des critères significatifs) |
+| `score_expert.py` | Analyse du score expert (Todd Lubart), note de créativité subjective |
+| `pca_clustering.py` | ACP sur les 12 critères normalisés ; scree plot, espace PCA, contributions (cos²) |
+| `clustering_criteres.py` | Clustering K-means (k=4) sur les critères ; profils créatifs A/B/C/D |
 
-Lancer un script depuis `stats/scripts/` :
 ```bash
+cd stats/scripts/
 python3 nom_script.py
 ```
 
@@ -302,11 +253,11 @@ python3 nom_script.py
 |---|---|
 | `ttest.png` | `t_test.py` |
 | `criteres_scoring.png` | `criteres_scoring.py` |
-| `scores_par_age.png` | `scores_par_age.py` |
-| `analyse_age.png` | `analyse_age.py` |
-| `criteres_ponderes.png` | `analyse_criteres_ponderes.py` |
 | `criteres_cohens_d.png` | `analyse_criteres_ponderes.py` |
-| `anova2.png` | `analyse_anova2.py` |
+| `criteres_ponderes.png` | `analyse_criteres_ponderes.py` |
+| `score_expert.png` | `score_expert.py` |
+| `pca_clustering.png` | `pca_clustering.py` |
+| `clustering_criteres.png` | `clustering_criteres.py` |
 
 ---
 
@@ -318,4 +269,3 @@ python3 nom_script.py
 ---
 
 *Développé par Marco G.*
-

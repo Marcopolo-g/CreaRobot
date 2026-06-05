@@ -15,6 +15,7 @@
 \usepackage{array}
 \usepackage{enumitem}
 \usepackage{setspace}
+\usepackage{url}
 
 
 \geometry{margin=2.5cm}
@@ -40,25 +41,28 @@
     \hfill
     \begin{minipage}{0.45\textwidth}
         \raggedleft
-        \includegraphics[height=1cm]{figures/logo_lutin.png}
+        \includegraphics[height=2cm]{figures/logo_lutin.png}
     \end{minipage}
     
-    \vspace{3cm}
-    
+    \vspace{1cm}
+
     % Title
-    {\Huge \textbf{CreaRobot}} \\[1cm]
-    {\Large Rapport de Stage Technique} \\[2cm]
-    
+    {\Huge \textbf{CreaRobot}} \\[0.5cm]
+    {\Large Rapport de Stage de Fin d'études} \\[1cm]
+
     % Info autor
-    {\Large Marco Grandclaude} \\[0.5cm]
-    {\large Sorbonne Université – Polytech Sorbonne} \\[0.3cm]
-    {\large Robotique } \\[0.3cm]
-    {\large 2025–2026} \\[2cm]
-    
+    {\Large Marco Grandclaude} \\[0.3cm]
+    {\large Sorbonne Université – Polytech Sorbonne} \\[0.2cm]
+    {\large Robotique} \\[0.2cm]
+    {\large 2025–2026} \\[1cm]
+
     % Info Stage
-    {\large 1er mars, 2025 – 31 août, 2026} \\[0.5cm]
-    {\large Laboratoire CHART} \\[2cm]
-    
+    {\large 1er mars, 2025 – 31 août, 2026} \\[0.3cm]
+    {\large Lutin - Laboratoire CHART} \\[1cm]
+
+    % Photo de couverture
+    \includegraphics[width=0.6\textwidth]{figures/lutin_intro.jpg}
+
     % Bottom
     \vfill
     {\large Paris, \today}
@@ -182,18 +186,59 @@ Le robot utilisé dans ce projet est illustré en figure~\ref{fig:qtrobot}.
 \section{Présentation du robot QTRobot}
 
 \subsection{Architecture matérielle et logicielle}
-% QTRobot V1 (Hyppolite) — Linux, ROS 1 Kinetic, Python 2.7
-% Deux PC internes (face/torse), ReSpeaker, caméra RealSense, caméra USB
+
+Le robot utilisé dans ce projet est un QTRobot V1 de la société LuxAI. Il s'agit d'un robot humanoïde de taille réduite, initialement conçu pour l'interaction sociale avec des enfants, notamment dans des contextes thérapeutiques auprès de personnes autistes (voir figure~\ref{fig:qtrobot}).
+
+Le QTRobot repose sur deux unités de calcul embarquées, reliées entre elles par câble Ethernet : une Raspberry Pi logé dans la tête (QTRP), et un mini-PC Intel NUC (Core i5/i7) situé dans le corps (QTPC). C'est le QTRP qui initialise l'environnement ROS au démarrage. Les deux machines partagent le même espace ROS et sont accessibles depuis l'extérieur via un point d'accès Wi-Fi créé par le QTRP, dont le SSID correspond au numéro de série du robot. L'architecture interne est illustrée en figure~\ref{fig:archi_robot2}.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.75\textwidth]{figures/architecture_robot2.png}
+    \caption{Architecture interne du QTRobot~\cite{luxai_doc}.}
+    \label{fig:archi_robot2}
+\end{figure}
+
+La figure~\ref{fig:archi_robot} présente l'ensemble des composants du robot. La répartition des périphériques suit une logique fonctionnelle : l'écran, les haut-parleurs, le réseau de microphones directionnels et les moteurs des bras sont rattachés au QTRP, tandis que la caméra 3D RealSense est connectée directement au QTPC. Deux ports sont également accessibles à l'arrière du robot : un port USB standard côté QTRP, et un port USB-C côté QTPC, permettant de brancher clavier, souris et écran via un hub. Du côté logiciel, le système embarqué repose sur Ubuntu 16.04, ROS\,1 Kinetic et Python\,2.7. LuxAI fournit une couche logicielle propriétaire qui expose les fonctionnalités du robot sous forme de topics et services ROS standards.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.75\textwidth]{figures/architecture_robot.png}
+    \caption{Composants matériels du QTRobot V1~\cite{luxai_doc}.}
+    \label{fig:archi_robot}
+\end{figure}
+
 \subsection{Prise en main : fonctionnalités de base}
-% Parole (qt_robot/speech/say), émotions, gestes, audio, behaviors
-% Connexion SSH, scp, rqt_image_view, web interface port 8080
-% Nuitrack hand tracking — résolution du conflit caméra USB / capteur 3D
+
+La connexion au robot s'effectue en SSH depuis le terminal d'un ordinateur vers le QTRP :
+
+\begin{verbatim}
+ssh developer@192.168.100.1
+\end{verbatim}
+
+L'ensemble des fonctionnalités du robot sont pilotées via des appels de services ROS. Les principaux services disponibles; \textit{parole}, \textit{émotion}, \textit{geste}, \textit{volume}, \textit{audio} et \textit{behavior}. Ces fonctionnalités suivent le format général suivant :
+
+\begin{verbatim}
+rosservice call /qt_robot/speech/say "message: '<TEXTE>'"
+rosservice call /qt_robot/emotion/show "name: 'QT/<NOM_EMOTION>'"
+rosservice call /qt_robot/gesture/play "name: 'QT/<NOM_GESTE>'"
+rosservice call /qt_robot/setting/setVolume "volume: <VALEUR>"
+rosservice call /qt_robot/audio/play "filename: 'QT/<FICHIER>'"
+rosservice call /qt_robot/behavior/talkText "message: '<TEXTE>'"
+\end{verbatim}
+
+La <VALEUR> de volume est un entier compris entre 0 et 100. Les \textit{behaviors} permettent de déclencher une séquence de parole avec animation de la bouche.
+
+Le robot dispose également d'une interface web accessible depuis les adresses \texttt{http://192.168.100.1:8080/} (QTRP) et \texttt{http://192.168.100.2:8080/} (QTPC). Elle permet notamment de configurer la connexion Wi-Fi du robot et d'activer ou désactiver les différents services système; rosbridge, moteurs, caméras, Nuitrack, etc.
+
+Nuitrack est la bibliothèque de suivi de squelette exploitable avec la caméra 3D RealSense ; elle s'active depuis cette interface. La caméra RealSense embarque en réalité deux composants distincts : une caméra RGB standard accessible via \texttt{start\_ros\_usb\_cam.sh}, et le capteur 3D proprement dit via \texttt{start\_qt\_realsense\_cam.sh}. Lorsque les deux services sont actifs simultanément, un conflit empêche Nuitrack de s'initialiser correctement. Ce point est sans incidence sur CreaRobot, qui utilise une caméra externe branchée sur le PC. On expliquera dans la suite de ce rapport pourquoi ce choix a été fait.
+
 \subsection{Contraintes et limites de la plateforme}
-% OS vieux → pas de remote SSH VSCode → solution SSHFS
-% Dépendances Python 2/3 : enfer des bibliothèques (ex. vosk, requests)
-% Versions du software LuxAI non disponibles → certains modules absents
-% ou non fonctionnels selon la version du robot (travail sur 2 versions)
-% Ex. qt_vosk_app : présent dans les fichiers mais inutilisable
+
+La première difficulté rencontrée concerne la reconnaissance vocale. Le QTRobot est censé embarquer \texttt{qt\_vosk\_app}, un module de reconnaissance vocale hors-ligne basé sur Vosk. Ce module était absent de la version du robot disponible au laboratoire. Une recherche a permis de retrouver une version du module publiée par LuxAI, mais celle-ci était conçue pour le QTRobot V2, qui fonctionne sous Python\,3, alors que le robot utilisé ici tourne sous Python\,2. De nombreuses tentatives d'adaptation ont été menées, mais chacune se heurtait à des conflits de dépendances de bibliothèques insolubles : Vosk n'existe tout simplement pas pour Python\,2, et un pont Python\,2/Python\,3 aurait représenté une complexité injustifiée.
+
+Face à cet échec, deux solutions alternatives ont été développées directement sur le robot, en tirant parti de son microphone embarqué. L'extension \textit{Remote SSH} de VS Code a été utilisée pendant cette phase pour éditer les fichiers directement dans le robot, tandis que la connexion SFTP (\texttt{sftp://qtrobot@192.168.100.1}) permettait de gérer les fichiers depuis le PC. La première solution, \texttt{ears.py}, effectuait la reconnaissance vocale sur le robot via la bibliothèque Python \texttt{speech\_recognition} et sa méthode \texttt{recognize\_google()}, qui transmet l'audio au service de reconnaissance Google sans clé API. La seconde, \texttt{ears\_v2.py}, déportait le traitement : le flux audio du microphone du robot était envoyé vers le PC, où la reconnaissance était réalisée. Ces deux approches ont finalement été abandonnées au profit d'un microphone externe branché sur le PC. Depuis l'externalisation des capteurs sur le PC (voir section~\ref{sec:architecture}), il n'est plus nécessaire de développer directement dans le robot.
+
+Par ailleurs, les versions antérieures du SDK de LuxAI ne sont plus disponibles en téléchargement, rendant toute réinstallation à partir d'un état connu impossible. Le développement a été conduit sur deux robots QTRobot de versions différentes ; toutes les fonctionnalités de base sont communes aux deux plateformes, mais certaines différences sont là notamment au niveau des modules présents ou non ainsi que des \textit{gestures} et \textit{emotions} préenregistrés.
 
 \newpage
 
@@ -222,6 +267,7 @@ Le robot utilisé dans ce projet est illustré en figure~\ref{fig:qtrobot}.
 
 % ============================================================
 \section{Architecture technique du système CreaRobot}
+\label{sec:architecture}
 
 % Intro de section : avant d'aboutir à l'architecture finale, une première
 % approche a consisté à garder toute l'intelligence sur le robot lui-même —
@@ -274,6 +320,7 @@ Le robot utilisé dans ce projet est illustré en figure~\ref{fig:qtrobot}.
 % geste + émotion simultanément via TaskSynchronizer (asyncio).
 % Auto-setup à la connexion : volume et langue depuis config.py.
 % Throttling de la caméra et queue\_length=1 pour éviter le lag cumulatif.
+% Décrire le TaskSynchronizer (task\_synchronizer.py) : classe asyncio qui lance parole + geste + émotion en parallèle sur le robot, avec gestion des délais pour la synchronisation de la bouche. C'est ce qui permet la synchronisation multi-actions, pas les behaviors natifs de QTRobot.
 
 \subsection{L'orchestrateur (\texttt{orchestrator\_node})}
 % Sommet de la hiérarchie — pilote la machine à états (5 phases).
@@ -380,13 +427,16 @@ Le robot utilisé dans ce projet est illustré en figure~\ref{fig:qtrobot}.
 % À rédiger en dernier.
 
 \newpage
+\bibliographystyle{plain}
+\bibliography{references}
+
+\newpage
 
 % ============================================================
 \appendix
 \section{Annexes}
 % À compléter.
 
-\bibliographystyle{plain}
-\bibliography{references}
+
 
 \end{document}

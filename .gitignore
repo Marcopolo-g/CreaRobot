@@ -21,3 +21,5 @@ last_picture.jpg
 *.out
 *.toc
 *.synctex.gz
+*.bbl
+*.blg
