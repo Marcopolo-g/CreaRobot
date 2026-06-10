@@ -4,22 +4,12 @@ from scipy import stats
 import matplotlib.pyplot as plt
 
 
-CRITERES  = ["Cn", "Cm", "Ne", "Cl", "Cth", "Bfd", "Bfi", "Pe", "Hu", "Uc_b", "Uc_c", "Uc_d"]
-MAXSCORES = {"Cn": 6, "Cm": 6, "Ne": 6, "Cl": 6, "Cth": 6,
-             "Bfd": 3, "Bfi": 3, "Pe": 6, "Hu": 3,
-             "Uc_b": 2, "Uc_c": 2, "Uc_d": 2}
-
 # Chargement — Adultes exclus
 df = pd.read_csv("../scores_tctdp.csv").dropna(subset=["Total"])
 df = df[df["Tranche_age"] != "Adulte"]
 
-# Normalisation : chaque critère /max → 0-1 ; Total normalisé sur 12
-for c in CRITERES:
-    df[c + "_n"] = df[c] / MAXSCORES[c]
-df["Total_n"] = df[[c + "_n" for c in CRITERES]].sum(axis=1)
-
-C0 = df[df["Condition"] == "C0"]["Total_n"]
-C1 = df[df["Condition"] == "C1"]["Total_n"]
+C0 = df[df["Condition"] == "C0"]["Total"]
+C1 = df[df["Condition"] == "C1"]["Total"]
 
 
 def flag_outliers(serie, seuil=2.5):
@@ -50,9 +40,9 @@ print()
 
 
 # Statistiques descriptives
-print("Statistiques descriptives  (score normalisé /12)")
-print(f"N C0 = {len(C0)}  |  Moyenne = {C0.mean():.3f}/12  |  SD = {C0.std():.3f}")
-print(f"N C1 = {len(C1)}  |  Moyenne = {C1.mean():.3f}/12  |  SD = {C1.std():.3f}")
+print("Statistiques descriptives  (score brut TCT-DP)")
+print(f"N C0 = {len(C0)}  |  Moyenne = {C0.mean():.3f}  |  SD = {C0.std():.3f}")
+print(f"N C1 = {len(C1)}  |  Moyenne = {C1.mean():.3f}  |  SD = {C1.std():.3f}")
 print()
 
 
@@ -80,7 +70,7 @@ t_crit  = stats.t.ppf(0.975, df=df_welch)
 ic_bas  = diff - t_crit * se_diff
 ic_haut = diff + t_crit * se_diff
 
-print(f"Différence des moyennes (C1 − C0) = {diff:.3f} /12")
+print(f"Différence des moyennes (C1 − C0) = {diff:.3f}")
 print(f"IC 95% = [{ic_bas:.3f} ; {ic_haut:.3f}]")
 print()
 
@@ -112,22 +102,22 @@ for i, (cond, vals) in enumerate({"C0": C0, "C1": C1}.items()):
     jitter = np.random.normal(0, 0.04, size=len(vals))
     ax.scatter([i] + jitter, vals, color=couleurs[cond], s=50, alpha=0.75, zorder=5)
 
-y_max  = max(C0.max(), C1.max()) + 0.5
-y_bar  = y_max
-y_p    = y_bar + 0.18
-y_info = y_bar + 0.50
+gap    = max(C0.max(), C1.max()) * 0.05
+y_bar  = max(C0.max(), C1.max()) + gap
+y_p    = y_bar + gap
+y_info = y_bar + gap * 3
 
 ax.plot([0, 1], [y_bar, y_bar], color="#444", linewidth=1.2)
 ax.text(0.5, y_p,    f"p = {p:.6f} {sig}", ha="center", fontsize=9)
 ax.text(0.5, y_info,
-        f"Δ = {diff:.3f}/12  |  IC 95% [{ic_bas:.3f} ; {ic_haut:.3f}]  |  d = {d:.3f}",
+        f"Δ = {diff:.3f}  |  IC 95% [{ic_bas:.3f} ; {ic_haut:.3f}]  |  d = {d:.3f}",
         ha="center", fontsize=9, color="#333")
 
 ax.set_xticks([0, 1])
 ax.set_xticklabels([f"C0\n(N={len(C0)})", f"C1\n(N={len(C1)})"], fontsize=12)
-ax.set_ylabel("Score TCT-DP normalisé (/12)", fontsize=11)
-ax.set_title("T-test de Welch : C0 vs C1\n(score normalisé, max = 12)", fontsize=11)
-ax.set_ylim(0, y_info + 0.4)
+ax.set_ylabel("Score TCT-DP brut", fontsize=11)
+ax.set_title("T-test de Welch : C0 vs C1\n(score brut)", fontsize=11)
+ax.set_ylim(0, y_info + gap * 2)
 ax.grid(alpha=0.3)
 ax.spines[["top", "right"]].set_visible(False)
 

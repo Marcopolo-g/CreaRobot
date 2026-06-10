@@ -235,9 +235,9 @@ Finalement, aucune analyse par tranche d'âge n'a pu être réalisée en raison 
 
 | Script | Description |
 |---|---|
-| `t_test.py` | T-test de Welch C0 vs C1 sur le score total normalisé (/12), retrait outliers |
+| `t_test.py` | T-test de Welch C0 vs C1 sur le score total brut, retrait outliers |
 | `criteres_scoring.py` | Cohen's d et moyennes normalisées par critère TCT-DP (C0 vs C1) |
-| `analyse_criteres_ponderes.py` | T-tests par critère + score restreint (somme des critères significatifs) |
+| `analyse_criteres.py` | T-tests bilatéraux par critère normalisé + Cohen's d |
 | `score_expert.py` | Analyse du score expert (Todd Lubart), note de créativité subjective |
 | `pca_clustering.py` | ACP sur les 12 critères normalisés ; scree plot, espace PCA, contributions (cos²) |
 | `clustering_criteres.py` | Clustering K-means (k=4) sur les critères ; profils créatifs A/B/C/D |
@@ -253,11 +253,12 @@ python3 nom_script.py
 |---|---|
 | `ttest.png` | `t_test.py` |
 | `criteres_scoring.png` | `criteres_scoring.py` |
-| `criteres_cohens_d.png` | `analyse_criteres_ponderes.py` |
-| `criteres_ponderes.png` | `analyse_criteres_ponderes.py` |
+| `criteres_cohens_d.png` | `analyse_criteres.py` |
 | `score_expert.png` | `score_expert.py` |
 | `pca_clustering.png` | `pca_clustering.py` |
 | `clustering_criteres.png` | `clustering_criteres.py` |
+| `clustering_validation.png` | `clustering_criteres.py` |
+| `clustering_stability.png` | `clustering_criteres.py` |
 
 ---
 

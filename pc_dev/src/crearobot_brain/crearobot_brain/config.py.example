@@ -4,7 +4,7 @@
 OPENAI_API_KEY = "YOUR_API_KEY_HERE"
 
 # --- Paramètres de la voix du robot ---
-VOICE_VOLUME = 75
+VOICE_VOLUME = 72
 VOICE_PITCH = 0
 VOICE_SPEED = 0
 VOICE_LANG = "fr-FR"
