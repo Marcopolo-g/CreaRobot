@@ -44,6 +44,6 @@ class TaskSynchronizer():
         return results
 
     def sync(self, tasks):
-        # On reste sur ta structure loop.run_until_complete
+        # On reste sur la structure loop.run_until_complete
         results = self.loop.run_until_complete(self.__non_blocking(tasks))
         return results

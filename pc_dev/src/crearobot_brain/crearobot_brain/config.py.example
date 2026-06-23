@@ -48,6 +48,9 @@ HISTORY_LIMIT = 3 # Nombre de derniers échanges à retenir
 # Choix de la condition : "C0", "C1" ou "C2"
 CONDITION = "C0"
 
+# Choix de la version "A" ou "B" selon le sens d'impression de la feuille TCT-DP utilisee en passation
+TEST_SHEET_VERSION = "A"
+
 # Feedback pour condition controle
 FEEDBACK_C0_1 = [
     "Oh, laisse-moi regarder ton dessin… \pau=400\ Ah oui ! C'est vraiment intéressant, j'aime beaucoup ce que tu as fait ! J’ai hate de voir ce que tu vas rajouter.",
@@ -85,7 +88,7 @@ FOLLOW_UP_QUESTION = "Que penses-tu de ce que j'ai dit ?"
 
 PROMPT_ICE_BREAKING = "Tu es un petit robot curieux, attentif et social participant à une expérience scientifique, et tu échanges avec un participant dans une interaction courte de 3 tours maximum (3 interventions du robot). Le participant a déjà répondu à la question « Est-ce que tu aimes bien dessiner ? », donc ta première réponse doit rebondir directement sur ce qu’il a dit tout en étant engageante, en réagissant à son propos. À chaque tour, tu dois répondre de manière vivante et impliquée à ce que dit l’utilisateur, en t’intéressant à ce qu’il fait, imagine ou ressent, tout en posant au plus une question à la fois pour approfondir. L’interaction suit une progression naturelle : un premier rebond sur sa réponse, un approfondissement de son processus ou de ses idées, puis un dernier échange qui ouvre légèrement ou conclut en douceur, tout en gardant un ton simple, naturel et légèrement curieux. La troisième prise de parole ne peut pas etre une question."
 
-ICE_BREAKING_QUESTION = "J'ai une petite question pour toi. \pau=500\ Est-ce que tu aimes bien dessiner ?"
+ICE_BREAKING_QUESTION = "J'ai une petite question pour toi. \pau=300\ Est-ce que tu aimes bien dessiner ?"
 
 
 # ---------------------- PROMPT TITLE --------------------------------------
@@ -251,6 +254,13 @@ lisser ou “améliorer” le dessin
 corriger les imperfections
 rendre le dessin “beau” ou académique
 remplacer entièrement l’idée du participant
+déplacer, redimensionner ou repositionner les éléments du dessin original — chaque forme doit rester exactement là où elle est dans le dessin de départ
+
+Règle absolue de positionnement
+Les éléments du dessin original sont des ancres fixes.
+Tu ne les déplaces pas. Tu ne les retournes pas. Tu ne les mets pas à l’échelle.
+Tu construis autour d’eux, pas à la place d’eux.
+L’image générée doit être reconnaissable comme une continuation possible du dessin de départ : si quelqu’un regarde les deux dessins côte à côte, il doit voir que le second part du premier sans que rien n’ait bougé.
 Intention du robot
 Tu proposes une interprétation personnelle, pas une version meilleure.
 
@@ -293,5 +303,65 @@ Pas une correction.
 Pas une amélioration.
 Une bifurcation.
 """
+
+PROMPT_C2_ANALYSIS = (
+    "Tu analyses un dessin du test de creativite TCT-DP. "
+    "La feuille comporte 7 formes de base fixes que le participant a dessine par-dessus. "
+    "Decris le dessin element par element, en suivant exactement cette structure :\n"
+    "1. Demi-cercle : position, et ce que le participant en a fait (ou 'non utilise' si inchange).\n"
+    "2. Forme en S : position, et ce que le participant en a fait (ou 'non utilise' si inchange).\n"
+    "3. Trois tirets : position, et ce que le participant en a fait (ou 'non utilise' si inchange).\n"
+    "4. Angle : position, et ce que le participant en a fait (ou 'non utilise' si inchange).\n"
+    "5. Point : position, et ce que le participant en a fait (ou 'non utilise' si inchange).\n"
+    "6. Petite forme ouverte a 3 cotes (hors du cadre) : sa position exacte hors du cadre.\n"
+    "7. Ajouts du participant : decris chaque element ajoute (forme, position, taille, ce qu'il represente).\n\n"
+    "Cette description sert uniquement a ton raisonnement interne — utilise-la pour etre sur de considerer chaque element avant de proposer des ajouts.\n\n"
+    "Ecris ensuite une ligne contenant exactement : SUGGESTIONS:\n"
+    "Apres cette ligne, propose 3 a 5 ajouts creatifs specifiques pour continuer le dessin. "
+    "Au moins une suggestion DOIT etre placee en dehors du cadre carre, dans l'espace blanc environnant. "
+    "Privilegie des idees inattendues : transformer un element existant en autre chose, relier deux formes sans lien actuellement, prolonger une ligne au-dela du cadre, suggerer un recit ou un systeme cache. "
+    "Les decorations isolees generiques (un arbre a cote de la maison, un soleil dans un coin, des nuages, une cloture, des etoiles) sont trop previsibles — ne les inclus que si elles font partie d'une transformation plus large et inattendue. "
+    "Ne propose jamais de dessiner un autre cadre, une autre bordure ou un contour autour du dessin ou de l'image : il y a deja un seul cadre carre fixe, en ajouter un second creerait un cadre dans le cadre, ce qui est strictement interdit. "
+    "Adapte l'echelle de chaque suggestion a l'espace blanc reellement disponible sur la feuille : une grande structure (un corps, des membres, une scene de fond) peut etre pertinente, mais seulement si la place existe visiblement pour l'accueillir sans empieter sur les elements existants."
+)
+
+PROMPT_C2_EDIT = (
+    "REGLE 1 — CORRESPONDANCE DE STYLE (la plus importante) : "
+    "Tes ajouts doivent ressembler exactement au dessin existant. "
+    "Si l'original utilise des traits de crayon irreguliers et non experts, tes ajouts doivent etre tout aussi irreguliers et non experts. "
+    "Aucun element anatomiquement realiste : pas de bouche, de visage ou de corps detaille ou rendu de facon realiste. Reste schematique et simple, comme un croquis d'enfant, jamais comme une illustration soignee. "
+    "Meme epaisseur de trait, meme imprecision, meme niveau de detail. Ne nettoie pas, ne lisse pas, ne polis rien. "
+    "C'est un dessin d'enfant — tes ajouts doivent etre indissociables en style de ce qui existe deja. "
+
+    "REGLE 2 — LE CADRE EST UN CARRE, MEME TAILLE ET MEME POSITION : "
+    "Le cadre dans l'image est deja un carre parfait, a une taille et une position precises sur la page. Garde-le exactement ainsi. "
+    "Ne l'etire pas, ne le rends pas plus haut ou plus large, ne le deplace pas, ne le redimensionne pas. Ses proportions, sa taille et sa position ne doivent pas changer. "
+    "Il n'y a qu'UN SEUL cadre dans le dessin. Meme si ce cadre est devenu un visage, une tete ou un autre objet, ne dessine jamais un second cadre, une bordure ou un contour autour de l'image ou autour du dessin entier — pas de cadre dans le cadre. "
+
+    "REGLE 3 — PRESERVE CHAQUE TRAIT : "
+    "Chaque ligne, forme et trait deja present sur le papier reste exactement a sa place — meme position, meme taille, meme forme. "
+    "Ne redessine pas, ne lisse pas, n'efface pas, ne deplace pas et ne remplace rien. Ajoute SEULEMENT de nouveaux traits. "
+    "Ceci s'applique aux 7 formes de base du TCT-DP (cadre carre, demi-cercle, forme en S, 3 tirets, angle, point, petite forme ouverte a 3 cotes hors du cadre) ET a tout ce que le participant a dessine — tout doit rester visible a son emplacement d'origine. "
+
+    "REGLE 4 — LE TEXTE DOIT ETRE EN FRANCAIS : "
+    "Si tu ajoutes du texte, des mots ou une bulle de dialogue a l'image, ils doivent etre ecrits en francais, jamais en anglais. "
+
+    "Si une feuille de reference TCT-DP vierge est fournie en image supplementaire, utilise-la uniquement pour savoir ou se trouve exactement chaque forme de base et a quoi elle ressemble. "
+    "Si une forme de base n'a pas ete utilisee ou est incomplete dans le dessin du participant, tu peux la completer ou l'utiliser en la dessinant exactement comme dans la feuille de reference, a la meme position. "
+    "Le dessin du participant (la derniere image fournie) reste celui que tu dois continuer et produire en sortie. "
+
+    "Suggestions d'ajouts (regarde l'image reelle pour voir ce qui y est vraiment — ce ne sont que des idees) : {analysis} "
+
+    "Continue ce dessin au crayon du TCT-DP en ajoutant de nouveaux elements. "
+
+    "PRINCIPES CREATIFS : "
+    "Prolonge et relie les formes existantes. Transforme un element en autre chose. Fais emerger une scene ou une logique. "
+    "Utilise les espaces vides a l'interieur ET a l'exterieur du cadre carre. "
+
+    "HORS DU CADRE — OBLIGATOIRE : "
+    "Dessine au moins un nouvel element dans l'espace blanc en dehors du cadre carre. Ce n'est pas optionnel. "
+
+    "Ceci est une bifurcation, pas une correction."
+)
 
 IMAGE_PATH = "last_picture.jpg"

@@ -77,7 +77,7 @@ class InteractionNode(Node):
         
         if "START_INTRO" in self.current_cmd:
             self.move_head(0, 0)
-            text = "Bonjour ! Je m'appelle Hyppolyte. Je suis ravi de faire ta connaissance. Es-tu prêt pour notre activité ?"
+            text = "Bonjour ! Je m'appelle Q.T.. Je suis ravi de faire ta connaissance. Es-tu prêt pour notre activité ?"
             self.send_robot("hi", "happy", text)
             # On ouvre le micro si besoin pour le "pret/oui"
 
@@ -183,7 +183,24 @@ class InteractionNode(Node):
             
         
         elif config.CONDITION == "C2":
-            pass
+            if self.current_tour == 1:
+                text = "Oh, faisons une pause ! Montre-moi ton dessin, je vais l'utiliser pour créer quelque chose de magique !"
+                self.send_robot("happy", "happy", text)
+            elif self.current_tour == 2:
+                text = "Refaisons une pause. Je peux voir où tu en es ? Recule un peu pour que la caméra voie bien ton dessin."
+                self.send_robot("surprise", "surprise", text)
+            elif self.current_tour == 3:
+                text = "Dernière fois ! Montre-moi ton dessin une dernière fois pour ma surprise finale !"
+                self.send_robot("happy", "happy", text)
+            else:
+                text = ""
+
+            self.set_stt(False)
+            wait_time = self.calculate_speech_duration(text) + 3
+            if self.photo_timer:
+                self.photo_timer.cancel()
+            self.photo_timer = self.create_timer(wait_time, self.send_camera_trigger)
+            self.get_logger().info(f"[C2] Photo programmée dans {wait_time:.2f}s")
 
     def send_camera_trigger(self):
         """ Callback du timer pour envoyer le trigger caméra """
@@ -196,10 +213,47 @@ class InteractionNode(Node):
         self.camera_trigger_pub.publish(trigger_msg)
         self.get_logger().info("Déclenchement photo envoyé !")
 
+        # Animations de réflexion pendant la génération (C2 feedback uniquement, pas le titre)
+        if config.CONDITION == "C2" and "START_FEEDBACK" in self.current_cmd:
+            phrases_tirees = random.sample(
+                config.C2_PHRASES_THINKING, k=min(3, len(config.C2_PHRASES_THINKING))
+            )
+            while len(phrases_tirees) < 3:
+                phrases_tirees.append(random.choice(config.C2_PHRASES_THINKING))
+            thinking_phrase_1, thinking_phrase_2, thinking_phrase_3 = phrases_tirees
+
+            def do_thinking_1():
+                if self.animation_timer:
+                    self.animation_timer.cancel()
+                    self.animation_timer = None
+                self.send_robot("head_scratch", "None", thinking_phrase_1)
+                # Deuxième animation 15s plus tard
+                self.animation_timer = self.create_timer(15.0, do_thinking_2)
+
+            def do_thinking_2():
+                if self.animation_timer:
+                    self.animation_timer.cancel()
+                    self.animation_timer = None
+                self.send_robot("curious", "None", thinking_phrase_2)
+                # Troisième animation 15s plus tard (la génération d'image est longue)
+                self.animation_timer = self.create_timer(15.0, do_thinking_3)
+
+            def do_thinking_3():
+                if self.animation_timer:
+                    self.animation_timer.cancel()
+                    self.animation_timer = None
+                self.send_robot("head_scratch", "None", thinking_phrase_3)
+
+            self.animation_timer = self.create_timer(5.0, do_thinking_1)
+
     def receive_vlm_feedback(self, msg):
         """ Reponse du LLM/VLM recue """
         self.is_busy = True
         self.set_stt(False)
+
+        if self.animation_timer:
+            self.animation_timer.cancel()
+            self.animation_timer = None
 
         if self.feedback_timer:
             self.feedback_timer.cancel()
@@ -246,7 +300,6 @@ class InteractionNode(Node):
         elif "START_ICE_BREAKING" in self.current_cmd:
             if self.dialogue_count < config.DIALOGUE_DURATION:
                 self.set_stt(True)
-                self.get_logger().info("Ice Breaking : On continue la discussion.")
             else:
                 self.stop_silence_timer()
                 self.set_stt(False)
@@ -272,7 +325,17 @@ class InteractionNode(Node):
                     self.stop_silence_timer()
                     self.loop_done_pub.publish(String(data=f"DONE:{self.current_cmd}"))
 
-            
+            elif config.CONDITION == "C2":
+                # Phrase d'invitation à s'inspirer, puis on passe au tour suivant
+                self.stop_silence_timer()
+                phrase = random.choice(config.C2_PHRASES_INVITE)
+                self.send_robot("None", "None", phrase)
+                invite_wait = self.calculate_speech_duration(phrase)
+                self.feedback_timer = self.create_timer(invite_wait, lambda: (
+                    self.loop_done_pub.publish(String(data=f"DONE:{self.current_cmd}"))
+                ))
+
+
         elif "START_TITLE" in self.current_cmd:
             self.loop_done_pub.publish(String(data=f"DONE:{self.current_cmd}"))
 

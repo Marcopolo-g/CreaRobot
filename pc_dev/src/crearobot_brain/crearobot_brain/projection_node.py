@@ -12,27 +12,25 @@ class ProjectionNode(Node):
         self.bridge = CvBridge()
         
         # --- CONFIGURATION ---
-        self.projector_x_offset = 1920 
+        self.projector_x_offset = 3072  # largeur de l'écran principal (3072x1728)
         self.window_name = "Projection_QT"
         self.current_image = None 
 
 
-        # --- SÉCURITÉ HDMI ---
-        if not self.is_projector_connected():
-            self.get_logger().error("Projecteur NON DÉTECTÉ ! Mode fenêtre sur écran principal activé.")
-            cv2.namedWindow(self.window_name, cv2.WINDOW_NORMAL)
-            # Pas de plein écran si pas de projecteur
-        else:
+        # --- DÉPLOIEMENT FENÊTRE ---
+        cv2.namedWindow(self.window_name, cv2.WINDOW_NORMAL)
+        if self.is_projector_connected():
             self.get_logger().info("Projecteur détecté. Déploiement plein écran...")
-            cv2.namedWindow(self.window_name, cv2.WINDOW_NORMAL)
             cv2.moveWindow(self.window_name, self.projector_x_offset, 0)
             cv2.setWindowProperty(self.window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+        else:
+            self.get_logger().warning("Projecteur NON DÉTECTÉ — fenêtre sur écran principal.")
 
         # Subscriber
         self.subscription = self.create_subscription(Image, '/pc/projector/image', self.image_callback, 10)
 
         # Timer pour rafraîchir l'image (20 FPS)
-        #self.gui_timer = self.create_timer(0.05, self.update_gui)
+        self.gui_timer = self.create_timer(0.05, self.update_gui)
 
         self.get_logger().info(f"Projection initialisée sur le projecteur (Offset: {self.projector_x_offset})")
 

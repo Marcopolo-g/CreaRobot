@@ -48,12 +48,21 @@ class OrchestratorNode(Node):
                 msg.data = "terminate"
                 self.state_machine(msg)
 
+            if user_input == "skip":
+                self.stop_timer()
+                self.get_logger().warn(f"SKIP : passage direct en FEEDBACK depuis {self.state}")
+                self.change_state("FEEDBACK")
+
     def start_experience(self):
         if self.init_timer:
             self.init_timer.cancel()
             self.init_timer = None
 
-        self.change_state("INTRO")
+        if config.DEBUG_SKIP_TO_FEEDBACK:
+            self.get_logger().warn("DEBUG_SKIP_TO_FEEDBACK activé : démarrage direct en DRAWING")
+            self.change_state("DRAWING")
+        else:
+            self.change_state("INTRO")
 
     def state_machine(self, msg):
         text = msg.data.lower()

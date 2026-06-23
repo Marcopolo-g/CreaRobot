@@ -4,56 +4,302 @@ from std_msgs.msg import String
 import openai
 import json
 import os
+import base64
+import io
+import subprocess
+import tempfile
+import numpy as np
+import cv2
+from sensor_msgs.msg import Image
 
 from . import config
 
+
 class BrainNode(Node):
+
+    # ── Initialisation ────────────────────────────────────────────────────────
+
     def __init__(self):
         super().__init__('brain_node')
-        openai.api_key = config.OPENAI_API_KEY
-        
-        # Memoire qui s'accumule au fil des tours
-        self.visual_memory = "" 
-        self.chat_history = []
+        self.client = openai.OpenAI(api_key=config.OPENAI_API_KEY)
+
+        self.visual_memory = ""
+        self.chat_history  = []
         self.current_phase = ""
-        
-        # Souscription a l'image (declenchee par InteractionNode)
-        self.img_sub = self.create_subscription(String, '/pc/vision/image_raw_b64', self.process_vision, 10)
-        # Souscription au texte pour la discussion continue
-        self.stt_sub = self.create_subscription(String, '/pc/stt/transcript', self.handle_dialogue, 10)
-        
-        # Envoi de la reponse vers InteractionNode
-        self.tts_pub = self.create_publisher(String, '/pc/vision/feedback', 10)
+        self.current_tour  = 0
 
-        self.phase_sub = self.create_subscription(String, '/pc/phase_control', self.phase_callback, 10)
-        
+        self.create_subscription(String, '/pc/vision/image_raw_b64', self.process_vision,  10)
+        self.create_subscription(String, '/pc/stt/transcript',        self.handle_dialogue, 10)
+        self.create_subscription(String, '/pc/phase_control',         self.phase_callback,  10)
+
+        self.tts_pub   = self.create_publisher(String, '/pc/vision/feedback',  10)
+        self.image_pub = self.create_publisher(Image,  '/pc/projector/image',  10)
+
+        self.tctdp_template_b64 = self._load_tctdp_template()
+        self.tctdp_template_png_buf = self._precompute_template_png()
         self.warmup_llm()
-
         self.get_logger().info("Brain Node prêt")
+
+    # ── Gestion des phases ────────────────────────────────────────────────────
 
     def phase_callback(self, msg):
         data = json.loads(msg.data)
         self.current_phase = data["phase"]
-        self.current_tour = data["tour"]
-        # Si on entre dans l'Ice Breaking, on donne le contexte au LLM
-        if "START_ICE_BREAKING" in self.current_phase:
-            # On vérifie si l'historique est vide pour ne pas ajouter la phrase plusieurs fois
-            if not self.chat_history:
-                question_depart = config.ICE_BREAKING_QUESTION
-                
-                # On l'ajoute comme si le robot l'avait déjà dit
-                self.chat_history.append({"role": "assistant", "content": question_depart})
+        self.current_tour  = data["tour"]
 
-        # Si on quitte l'Ice Breaking pour passer aux consignes
+        if "START_ICE_BREAKING" in self.current_phase:
+            if not self.chat_history:
+                self.chat_history.append({
+                    "role": "assistant",
+                    "content": config.ICE_BREAKING_QUESTION
+                })
+
         if "START_TASK_INTRO" in self.current_phase:
             if self.chat_history:
-                self.get_logger().info("Réinitialisation de la mémoire : conversation Ice Breaking effacée.")
+                self.get_logger().info("Réinitialisation mémoire : Ice Breaking effacé.")
                 self.chat_history = []
 
-    def warmup_llm(self):
-        # On lance une requete minuscule pour ouvrir la connexion
+    # ── Analyse visuelle ──────────────────────────────────────────────────────
+
+    def process_vision(self, msg):
+        self.get_logger().info("Analyse du dessin en cours...")
         try:
-            openai.ChatCompletion.create(
+            is_title_phase = "START_TITLE" in self.current_phase
+
+            if is_title_phase:
+                prompt = config.PROMPT_TITLE
+            elif not self.visual_memory:
+                prompt = (
+                    "Décris ce que tu vois sur le dessin de maniere a pouvoir te rappeler "
+                    "du dessin plus tard sans le voir (entre autre, précise les formes et "
+                    "les objets de ce dessin)."
+                )
+            else:
+                prompt = (
+                    f"Precedemment, le dessin etait : {self.visual_memory}. "
+                    "Dis moi ce qui a change ou ce qui est nouveau ou les modifications "
+                    "apportées par rapport à la description précédente. Sois très précis sur les ajouts."
+                )
+
+            messages = [{"role": "system", "content": ""}]
+            messages.extend(self.chat_history)
+            messages.append({
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{msg.data}"}}
+                ]
+            })
+
+            response = self.client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=messages,
+                max_tokens=300
+            )
+            answer = response.choices[0].message.content
+
+            if is_title_phase:
+                self.send_to_robot(answer)
+                return
+
+            if not self.visual_memory:
+                self.visual_memory = answer
+            else:
+                self.visual_memory += f"\n[Ajouts récents] : {answer}"
+
+            if config.CONDITION == "C1":
+                self.generate_c1_feedback()
+            elif config.CONDITION == "C2":
+                self.generate_c2_feedback(msg.data)
+
+        except Exception as e:
+            self.get_logger().error(f"Erreur Vision : {e}")
+
+    # ── Feedback C1 (dialogue verbal) ─────────────────────────────────────────
+
+    def generate_c1_feedback(self):
+        try:
+            messages = [{"role": "system", "content": config.PROMPT_C1}]
+            messages.extend(self.chat_history)
+            messages.append({"role": "system", "content": f"Dessin actuel : {self.visual_memory}"})
+
+            response = self.client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=messages,
+                max_tokens=100
+            )
+            text = response.choices[0].message.content
+            self.chat_history.append({"role": "assistant", "content": text})
+            self.send_to_robot(text)
+
+        except Exception as e:
+            self.get_logger().error(f"Erreur C1 : {e}")
+
+    # ── Feedback C2 (génération d'image) ───────────────────────────────
+
+    def _pad_to_square(self, img_cv):
+        """ Ajoute des bordures blanches pour obtenir un carre, puis redimensionne en 1024x1024 """
+        h, w = img_cv.shape[:2]
+        size = max(h, w)
+        pad_top    = (size - h) // 2
+        pad_bottom = size - h - pad_top
+        pad_left   = (size - w) // 2
+        pad_right  = size - w - pad_left
+        img_sq = cv2.copyMakeBorder(
+            img_cv, pad_top, pad_bottom, pad_left, pad_right,
+            cv2.BORDER_CONSTANT, value=(255, 255, 255)
+        )
+        return cv2.resize(img_sq, (1024, 1024))
+
+    def generate_c2_feedback(self, base64_image):
+        try:
+            self.get_logger().info("Génération image C2...")
+
+            # ── Décoder et mettre en carré 1024x1024 (requis par gpt-image-1) ──
+            img_raw = base64.b64decode(base64_image)
+            img_arr = np.frombuffer(img_raw, dtype=np.uint8)
+            img_cv  = cv2.imdecode(img_arr, cv2.IMREAD_COLOR)
+            img_sq  = self._pad_to_square(img_cv)
+            _, img_png_buf = cv2.imencode('.png', img_sq)
+
+            # ── GPT-4o-mini : description du dessin pour contextualiser gpt-image-1 ──
+            description = self.client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": config.PROMPT_C2_ANALYSIS},
+                    {"role": "user", "content": [
+                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
+                    ]}
+                ],
+                max_tokens=350
+            ).choices[0].message.content
+            self.get_logger().info(f"Description GPT : {description}")
+
+            edit_prompt = config.PROMPT_C2_EDIT.format(description=description)
+            template_png_buf = self.tctdp_template_png_buf
+            if template_png_buf is not None:
+                images_for_edit = [
+                    ("template.png", io.BytesIO(template_png_buf.tobytes()), "image/png"),
+                    ("drawing.png", io.BytesIO(img_png_buf.tobytes()), "image/png"),
+                ]
+            else:
+                images_for_edit = ("drawing.png", io.BytesIO(img_png_buf.tobytes()), "image/png")
+
+            # ── gpt-image-1 edit sans masque ─────────────────────────────────
+            # input_fidelity="high" : preserve fidelement les details de l'image d'entree
+            # (formes, traits) au lieu de laisser le modele les redessiner/deformer
+            image_response = self.client.images.edit(
+                model="gpt-image-1",
+                image=images_for_edit,
+                prompt=edit_prompt,
+                size="1024x1024",
+                quality="low",
+                input_fidelity="high"
+            )
+            img_bytes   = base64.b64decode(image_response.data[0].b64_json)
+            img_out_arr = np.frombuffer(img_bytes, dtype=np.uint8)
+            img_decoded = cv2.imdecode(img_out_arr, cv2.IMREAD_COLOR)
+
+            # ── Publier vers le projecteur ────────────────────────────────────
+            ros_img              = Image()
+            ros_img.header.stamp = self.get_clock().now().to_msg()
+            ros_img.height, ros_img.width = img_decoded.shape[:2]
+            ros_img.encoding     = 'bgr8'
+            ros_img.step         = ros_img.width * 3
+            ros_img.data         = img_decoded.tobytes()
+            self.image_pub.publish(ros_img)
+            self.get_logger().info("Image generee et envoyee au projecteur")
+
+            text = "Voila, j'ai essaye quelque chose a partir de ton dessin !"
+            self.chat_history.append({"role": "assistant", "content": text})
+            self.send_to_robot(text)
+
+        except Exception as e:
+            self.get_logger().error(f"Erreur C2 : {e}")
+
+
+    def handle_dialogue(self, msg):
+        is_feedback     = "START_FEEDBACK"    in self.current_phase
+        is_ice_breaking = "START_ICE_BREAKING" in self.current_phase
+
+        if not is_feedback and not is_ice_breaking:
+            return
+        if is_feedback and not self.visual_memory:
+            return
+
+        user_input = msg.data
+
+        if is_ice_breaking:
+            messages = [{"role": "system", "content": config.PROMPT_ICE_BREAKING}]
+        else:
+            messages = [{"role": "system", "content": config.PROMPT_C1}]
+            messages.append({"role": "system", "content": f"Memoire visuelle : {self.visual_memory}"})
+
+        messages.extend(self.chat_history[-6:])
+        messages.append({"role": "user", "content": user_input})
+
+        try:
+            response = self.client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=messages,
+                max_tokens=80
+            )
+            answer = response.choices[0].message.content
+            self.chat_history.append({"role": "user",      "content": user_input})
+            self.chat_history.append({"role": "assistant", "content": answer})
+            self.send_to_robot(answer)
+
+        except Exception as e:
+            self.get_logger().error(f"Erreur Dialogue ({self.current_phase}) : {e}")
+
+    # ── Utilitaires ───────────────────────────────────────────────────────────
+
+    def _load_tctdp_template(self):
+        filename = f"test_sheet_{config.TEST_SHEET_VERSION}.pdf"
+        here = os.path.dirname(os.path.abspath(__file__))
+        candidats = [
+            os.path.join(here, '../../../', filename),
+            os.path.join(here, '../../../../../../', filename),
+        ]
+        pdf_path = next((c for c in candidats if os.path.exists(c)), candidats[0])
+        try:
+            import glob
+            with tempfile.TemporaryDirectory() as tmpdir:
+                # 75 DPI suffit pour l'analyse gpt-4o-mini (positions des éléments)
+                subprocess.run(
+                    ['pdftoppm', '-r', '75', '-l', '1', '-jpeg', pdf_path, f'{tmpdir}/page'],
+                    check=True, capture_output=True
+                )
+                pages = sorted(glob.glob(f'{tmpdir}/page*.jpg'))
+                if not pages:
+                    raise FileNotFoundError("Aucune page extraite du PDF")
+                with open(pages[0], 'rb') as f:
+                    b64 = base64.b64encode(f.read()).decode('utf-8')
+            self.get_logger().info(f"Template TCT-DP charge ({filename})")
+            return b64
+        except Exception as e:
+            self.get_logger().warning(f"Template TCT-DP non charge : {e}")
+            return None
+
+    def _precompute_template_png(self):
+        """Pré-calcule le template en PNG 1024x1024 une seule fois au démarrage."""
+        if not self.tctdp_template_b64:
+            return None
+        try:
+            tpl_raw = base64.b64decode(self.tctdp_template_b64)
+            tpl_arr = np.frombuffer(tpl_raw, dtype=np.uint8)
+            tpl_cv  = cv2.imdecode(tpl_arr, cv2.IMREAD_COLOR)
+            tpl_sq  = self._pad_to_square(tpl_cv)
+            _, buf = cv2.imencode('.png', tpl_sq)
+            self.get_logger().info("Template TCT-DP pré-calculé en PNG 1024x1024")
+            return buf
+        except Exception as e:
+            self.get_logger().warning(f"Pré-calcul template PNG échoué : {e}")
+            return None
+
+    def warmup_llm(self):
+        try:
+            self.client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": "ping"}],
                 max_tokens=1
@@ -61,162 +307,24 @@ class BrainNode(Node):
         except Exception as e:
             self.get_logger().error(f"Echec du warmup : {e}")
 
-    def process_vision(self, msg):
-        # On commence par analyser ce qu'il y a sur l'image
-        self.get_logger().info("Analyse du dessin en cours...")
-
-        try:
-            is_title_phase = "START_TITLE" in self.current_phase
-
-            if is_title_phase:
-                prompt = config.PROMPT_TITLE
-            elif not self.visual_memory:
-                prompt = "Décris ce que tu vois sur le dessin de maniere a pouvoir te rappeler du dessin plus tard sans le voir (entre autre, précise les formes et les objets de ce dessin)."
-            else:
-                prompt = f"Precedemment, le dessin etait : {self.visual_memory}."
-                prompt += f"Dis moi ce qui a change ou ce qui est nouveau ou les modifications apportées par rapport à la description précédente. Sois très précis sur les ajouts."
-
-            messages = [{"role": "system", "content": ""}]
-            messages.extend(self.chat_history)
-
-            # On ajoute l'image et le prompt actuel
-            messages.append({
-                "role": "user", 
-                "content": [
-                    {"type": "text", "text": prompt},
-                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{msg.data}"}}
-                ]
-            })
-
-            response = openai.ChatCompletion.create(
-                model="gpt-4o-mini",
-                messages=messages,
-                max_tokens=300
-            )
-            
-            # Mise a jour de la memoire visuelle
-            answer = response.choices[0].message.content
-
-            if is_title_phase:
-                # On envoie le titre généré et on s'arrête là !
-                self.send_to_robot(answer)
-                return
-
-            if not self.visual_memory:
-                # Initialisation
-                self.visual_memory = answer
-            else:
-                # On empile les ajouts pour mettre en évidence la progression
-                self.visual_memory += f"\n[Ajouts récents] : {answer}"
-            
-            # On aiguille selon la condition definie dans la config
-            if config.CONDITION == "C1":
-                self.generate_c1_feedback()
-            elif config.CONDITION == "C2":
-                self.generate_c2_feedback(msg.data) # On passe l'image pour C2
-
-        except Exception as e:
-            self.get_logger().error(f"Erreur Vision : {e}")
-
-    def generate_c1_feedback(self):
-        try:
-            # Pour le feedback C1, on inclut aussi l'historique pour etre coherent
-            messages = [{"role": "system", "content": config.PROMPT_C1}]
-            messages.extend(self.chat_history)
-            messages.append({"role": "system", "content": f"Dessin actuel : {self.visual_memory}"})
-            
-            response = openai.ChatCompletion.create(
-                model="gpt-4o-mini",
-                messages=messages,
-                max_tokens=100
-            )
-            
-            text = response.choices[0].message.content
-            self.chat_history.append({"role": "assistant", "content": text})
-            self.send_to_robot(text)
-            
-        except Exception as e:
-            self.get_logger().error(f"Erreur C1 : {e}")
-
-    def generate_c2_feedback(self, base64_image):
-        # Logique C2 : QT va generer une image (DALL-E) plus tard ici
-        # Pour l'instant on prepare juste la structure
-        self.get_logger().info("Preparation du feedback C2 (Surprise)")
-        
-        msg_c2 = "C'est super ! J'ai une idée de génie pour transformer ton dessin, regarde !"
-        # Ici on viendra inserer l'appel a l'API de generation d'image
-        self.send_to_robot(msg_c2)
-
-
-    def handle_dialogue(self, msg):
-        # On vérifie si on est dans une phase autorisée (Feedback OU Ice Breaking)
-        is_feedback = "START_FEEDBACK" in self.current_phase
-        is_ice_breaking = "START_ICE_BREAKING" in self.current_phase
-
-        if not is_feedback and not is_ice_breaking:
-            return
-        
-        # En feedback on a besoin de la vision, en ice breaking non.
-        if is_feedback and not self.visual_memory:
-            return
-
-        user_input = msg.data
-        
-        # On définit le prompt et le contexte selon la phase
-        if is_ice_breaking:
-            # Prompt simple pour briser la glace
-            system_prompt = config.PROMPT_ICE_BREAKING
-            messages = [{"role": "system", "content": system_prompt}]
-        else:
-            # Prompt classique pour le feedback du dessin
-            system_prompt = config.PROMPT_C1
-            messages = [{"role": "system", "content": system_prompt}]
-            messages.append({"role": "system", "content": f"Memoire visuelle : {self.visual_memory}"})
-        
-        # On ajoute l'historique récent (valable pour les deux phases)
-        messages.extend(self.chat_history[-6:])
-        messages.append({"role": "user", "content": user_input})
-
-        try:
-            response = openai.ChatCompletion.create(
-                model="gpt-4o-mini",
-                messages=messages,
-                max_tokens=80
-            )
-            
-            answer = response.choices[0].message.content
-            
-            # On enregistre dans l'historique pour que QT réponde de manière cohérente
-            self.chat_history.append({"role": "user", "content": user_input})
-            self.chat_history.append({"role": "assistant", "content": answer})
-            
-            self.send_to_robot(answer)
-            
-        except Exception as e:
-            self.get_logger().error(f"Erreur Dialogue ({self.current_phase}) : {e}")
-
     def send_to_robot(self, text):
         msg = String()
         msg.data = text
         self.tts_pub.publish(msg)
 
+
+# ── Entrypoint ────────────────────────────────────────────────────────────────
+
 def main(args=None):
     rclpy.init(args=args)
-    
-    # Remplace 'MonNode' par le nom de la classe du fichier (BrainNode, STTNode, etc.)
-    node = BrainNode() 
+    node = BrainNode()
 
     try:
         rclpy.spin(node)
     except (KeyboardInterrupt, rclpy.executors.ExternalShutdownException):
-        # On ne print rien ici pour les noeuds esclaves, 
-        # seul l'orchestrateur affichera le message d'arret.
         pass
     finally:
-        # Nettoyage rapide du noeud
         if rclpy.ok():
             node.destroy_node()
             rclpy.shutdown()
-        
-        # Sortie immediate pour eviter la pollution des logs ROS 2
         os._exit(0)
