@@ -9,6 +9,32 @@ VOICE_PITCH = 0
 VOICE_SPEED = 0
 VOICE_LANG = "fr-FR"
 
+# --- Smileys vocaux Acapela ---
+LISTE_VOCAL_SMILEYS = [
+    "#MUM_CALLING#", "#DAD_CALLING#", "#MUM_WHINING#", "#DAD_WHINING#",
+    "#MUM_QUESTIONING#", "#DAD_QUESTIONING#", "#MUM_WHEEDLING#", "#DAD_WHEEDLING#",
+    "#MUM_ANGRY#", "#DAD_ANGRY#",
+    "#CRY01#", "#CRY02#", "#CRY03#", "#CRY04#",
+    "#AARGH01#", "#AARGH02#", "#AARGH03#",
+    "#BREATH01#", "#BREATH02#", "#BREATH03#",
+    "#CLICK01#", "#CLICK02#",
+    "#MMM01#", "#MMM02#", "#MMM03#",
+    "#LAUGH01#", "#LAUGH02#", "#LAUGH03#",
+    "#SLEEP01#", "#SLEEP02#",
+    "#WHISTLE01#", "#WHISTLE02#",
+    "#SNEEZE01#", "#SNEEZE02#",
+    "#YAWN01#", "#YAWN02#",
+    "#COUGH01#", "#COUGH02#",
+    "#SWALLOW01#", "#SWALLOW02#",
+    "#THROAT01#", "#THROAT02#", "#THROAT03#",
+    "#DOG#", "#CAT#", "#FROG#", "#COW#", "#SHEEP#", "#GOAT#",
+    "#DUCK#", "#CHICKEN#", "#HORSE#", "#DONKEY#", "#PIG#", "#GOOSE#",
+    "#ELEPHANT#", "#WOLF#", "#LION#", "#SNAKE#", "#MONKEY#",
+    "#BIRD#", "#CROW#", "#MOUSE#", "#BEE#", "#BEAR#", "#ROOSTER#",
+    "#CAR REVVING#", "#CAR HORN#", "#TRAIN#",
+    "#POLICE SIREN#", "#FIRE SIREN#", "#AMBULANCE SIREN#",
+]
+
 # --- Listes des comportements (QT V2) ---
 LISTE_GESTURES = [
     "angry", "bored", "breathing_exercise", "bye", "bye-bye", "challenge",
