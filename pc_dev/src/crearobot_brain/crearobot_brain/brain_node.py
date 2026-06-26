@@ -8,6 +8,7 @@ import base64
 import io
 import subprocess
 import tempfile
+import time
 import numpy as np
 import cv2
 from sensor_msgs.msg import Image
@@ -91,11 +92,13 @@ class BrainNode(Node):
                 ]
             })
 
+            t0 = time.time()
             response = self.client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=messages,
                 max_tokens=300
             )
+            self.get_logger().info(f"[LATENCE] GPT vision : {time.time() - t0:.2f} s")
             answer = response.choices[0].message.content
 
             if is_title_phase:
@@ -123,11 +126,13 @@ class BrainNode(Node):
             messages.extend(self.chat_history)
             messages.append({"role": "system", "content": f"Dessin actuel : {self.visual_memory}"})
 
+            t0 = time.time()
             response = self.client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=messages,
                 max_tokens=100
             )
+            self.get_logger().info(f"[LATENCE] GPT C1 feedback : {time.time() - t0:.2f} s")
             text = response.choices[0].message.content
             self.chat_history.append({"role": "assistant", "content": text})
             self.send_to_robot(text)
@@ -163,6 +168,7 @@ class BrainNode(Node):
             _, img_png_buf = cv2.imencode('.png', img_sq)
 
             # ── GPT-4o-mini : description du dessin pour contextualiser gpt-image-1 ──
+            t0 = time.time()
             description = self.client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
@@ -173,6 +179,7 @@ class BrainNode(Node):
                 ],
                 max_tokens=350
             ).choices[0].message.content
+            self.get_logger().info(f"[LATENCE] GPT-4o-mini description : {time.time() - t0:.2f} s")
             self.get_logger().info(f"Description GPT : {description}")
 
             edit_prompt = config.PROMPT_C2_EDIT.format(description=description)
@@ -188,6 +195,7 @@ class BrainNode(Node):
             # ── gpt-image-1 edit sans masque ─────────────────────────────────
             # input_fidelity="high" : preserve fidelement les details de l'image d'entree
             # (formes, traits) au lieu de laisser le modele les redessiner/deformer
+            t1 = time.time()
             image_response = self.client.images.edit(
                 model="gpt-image-1",
                 image=images_for_edit,
@@ -196,6 +204,8 @@ class BrainNode(Node):
                 quality="low",
                 input_fidelity="high"
             )
+            self.get_logger().info(f"[LATENCE] gpt-image-1 génération : {time.time() - t1:.2f} s")
+            self.get_logger().info(f"[LATENCE] C2 total (description + image) : {time.time() - t0:.2f} s")
             img_bytes   = base64.b64decode(image_response.data[0].b64_json)
             img_out_arr = np.frombuffer(img_bytes, dtype=np.uint8)
             img_decoded = cv2.imdecode(img_out_arr, cv2.IMREAD_COLOR)
@@ -239,11 +249,13 @@ class BrainNode(Node):
         messages.append({"role": "user", "content": user_input})
 
         try:
+            t0 = time.time()
             response = self.client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=messages,
                 max_tokens=80
             )
+            self.get_logger().info(f"[LATENCE] GPT dialogue : {time.time() - t0:.2f} s")
             answer = response.choices[0].message.content
             self.chat_history.append({"role": "user",      "content": user_input})
             self.chat_history.append({"role": "assistant", "content": answer})

@@ -66,7 +66,8 @@ class OrchestratorNode(Node):
 
     def state_machine(self, msg):
         text = msg.data.lower()
-        
+        self.get_logger().info(f"[STT→ORCH] état={self.state} | '{text[:60]}'")
+
         if self.state == "INTRO" and any(x in text for x in ["oui", "pret"]):
             self.change_state("ICE_BREAKING")
         
@@ -132,6 +133,13 @@ class OrchestratorNode(Node):
 
         elif self.state == "TASK_INTRO" and "TASK_INTRO" in phase:
             self.change_state("DRAWING")
+
+        elif self.state == "DRAWING" and "DRAWING" in phase:
+            self.stop_timer()
+            if self.current_loop >= config.MAX_LOOPS:
+                self.change_state("TITLE")
+            else:
+                self.change_state("FEEDBACK")
 
         elif self.state == "FEEDBACK" and "FEEDBACK" in phase:
             self.current_loop += 1

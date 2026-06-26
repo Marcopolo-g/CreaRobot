@@ -77,7 +77,7 @@ class InteractionNode(Node):
         
         if "START_INTRO" in self.current_cmd:
             self.move_head(0, 0)
-            text = "Bonjour ! Je m'appelle Q.T.. Je suis ravi de faire ta connaissance. Es-tu prêt pour notre activité ?"
+            text = "Bonjour ! #LAUGH01# Je m'appelle Q.T.. Je suis ravi de faire ta connaissance. Es-tu prêt pour notre activité ?"
             self.send_robot("hi", "happy", text)
             # On ouvre le micro si besoin pour le "pret/oui"
 
@@ -108,7 +108,7 @@ class InteractionNode(Node):
 
             # ----------- A MODIFIER -------------------------------------------------
             if self.current_tour == 1:
-                self.send_robot("curious", "None", "C’est parti pour le dessin !")
+                self.send_robot("happy", "None", "C’est parti pour le dessin !")
             elif self.current_tour == 2:
                 self.send_robot("challenge", "None", "Reprenons le dessin !")
             elif self.current_tour == 3:
@@ -128,7 +128,7 @@ class InteractionNode(Node):
         elif "START_TITLE" in self.current_cmd:
             # Le robot se penche pour admirer l'œuvre finale
             self.move_head(0, 20)
-            text = "C'est fini ! Laisse-moi admirer ton œuvre une dernière fois pour lui trouver un titre..."
+            text = "C'est fini ! #MMM01# Laisse-moi admirer ton œuvre une dernière fois pour lui trouver un titre..."
             self.send_robot("happy", "happy", text)
             
             self.set_stt(False)
@@ -226,7 +226,7 @@ class InteractionNode(Node):
                 if self.animation_timer:
                     self.animation_timer.cancel()
                     self.animation_timer = None
-                self.send_robot("head_scratch", "None", thinking_phrase_1)
+                self.send_robot("bored", "None", thinking_phrase_1)
                 # Deuxième animation 15s plus tard
                 self.animation_timer = self.create_timer(15.0, do_thinking_2)
 
@@ -234,7 +234,7 @@ class InteractionNode(Node):
                 if self.animation_timer:
                     self.animation_timer.cancel()
                     self.animation_timer = None
-                self.send_robot("curious", "None", thinking_phrase_2)
+                self.send_robot("neutral", "None", thinking_phrase_2)
                 # Troisième animation 15s plus tard (la génération d'image est longue)
                 self.animation_timer = self.create_timer(15.0, do_thinking_3)
 
@@ -242,7 +242,7 @@ class InteractionNode(Node):
                 if self.animation_timer:
                     self.animation_timer.cancel()
                     self.animation_timer = None
-                self.send_robot("head_scratch", "None", thinking_phrase_3)
+                self.send_robot("bored", "None", thinking_phrase_3)
 
             self.animation_timer = self.create_timer(5.0, do_thinking_1)
 
@@ -273,13 +273,25 @@ class InteractionNode(Node):
     def stt_callback(self, msg):
         if self.is_busy:
             return
-        
+
         self.stop_silence_timer()
 
         if "START_FEEDBACK" in self.current_cmd or "START_ICE_BREAKING" in self.current_cmd:
             self.is_busy = True
             self.set_stt(False)
             self.get_logger().info(f"Dialogue Feedback verrouillé pour : {msg.data}")
+
+        elif "START_DRAWING" in self.current_cmd:
+            text = msg.data.lower()
+            if any(x in text for x in ["fini", "terminé", "pret"]):
+                self.get_logger().info(f"Fin du dessin détectée : '{msg.data}'")
+                self.is_busy = True
+                self.set_stt(False)
+                self.stop_random_animation()
+                self.loop_done_pub.publish(String(data=f"DONE:{self.current_cmd}"))
+            else:
+                self.get_logger().info(f"Audio capté (Phase {self.current_cmd}) : {msg.data}")
+
         else:
             self.get_logger().info(f"Audio capté (Phase {self.current_cmd}) : {msg.data}")
 
@@ -347,7 +359,7 @@ class InteractionNode(Node):
             self.feedback_timer.cancel()
             self.feedback_timer = None
             
-        self.send_robot("bye", "happy", "Voilà, le temps est écoulé ! Merci d'avoir dessiné avec moi aujourd'hui !")
+        self.send_robot("bye", "happy", "Voilà, le temps est écoulé ! #LAUGH02# Merci d'avoir dessiné avec moi aujourd'hui !")
 
     def tour_callback(self, msg):
         """Met à jour le numéro du tour actuel envoyé par l'orchestrateur"""
@@ -397,7 +409,7 @@ class InteractionNode(Node):
         # On n'anime que si le robot ne fait rien d'autre
         if not self.is_busy and "START_DRAWING" in self.current_cmd:
             # Liste des gestes disponibles
-            gestures = ["curious", "bored", "head_scratch"]
+            gestures = ["bored", "neutral", "kiss"]
           
             self.send_robot(random.choice(gestures), "None", "")
             

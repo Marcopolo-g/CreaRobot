@@ -1,6 +1,6 @@
-# Projet Hyppolite — Orchestration TCT-DP & IA Générative
+# Projet — Orchestration TCT-DP & IA Générative
 
-> QTrobot V1 (ROS 1 Kinetic) transformé en compagnon social intelligent. L'intelligence, la vision et l'audition sont déportées sur PC (ROS 2) pour une réactivité maximale.
+> QTrobot V1 et V2 (ROS 1 Kinetic et ROS 1 Noetic) transformé en compagnon social intelligent. L'intelligence, la vision et l'audition sont déportées sur PC (ROS 2) pour une réactivité maximale.
 
 ---
 
@@ -19,30 +19,45 @@ Pour garantir une interaction fluide, tous les capteurs (micro, caméra) sont br
 | Vision démo | `vision_node_temp` | Mode Science Infuse : capture d'écran HDMI (via mss) |
 | Cognition | `brain_node` | LLM/VLM : analyse texte et image, génère les réponses |
 | Projection | `projection_node` | Affiche le visuel du dessin sur le projecteur HDMI (C2) |
-| Passerelle | `gateway_node` | Bridge ROS 1 ↔ ROS 2 via WebSocket (rosbridge :9090) |
+| Passerelle | `gateway_node` | Bridge ROS 1 ↔ ROS 2 via WebSocket (rosbridge :9091) |
 
 ---
 
 ## Connexion et configuration
 
-### Accès au robot
+### QTRobot V1
 
 ```bash
 # SSH
-ssh qtrobot@192.168.100.1
+ssh qtrobot@192.168.100.1 # QTRP
+ssh qtrobot@192.168.100.2 # QTPC
 
 # Interface web (autostart des services)
 http://192.168.100.1:8080
 http://192.168.100.2:8080
 ```
 
-### Workflow de développement
-
-Pour accéder directement aux fichiers du robot et/ou coder directement dans le robot.
+Workflow de développement — accès direct aux fichiers du robot :
 
 ```bash
 sftp://qtrobot@192.168.100.1/
 ```
+
+### QTRobot V2
+
+Le V2 ne dispose pas d'interface web ni de hotspot WiFi propre. La Raspberry Pi (QTRP) est connectée directement à un réseau WiFi et le PC doit être connecté au même réseau. La communication ROS 1 ↔ ROS 2 se fait via ce WiFi partagé.
+
+Adresse IP de QTRP sur le réseau :
+```
+192.168.24.118
+```
+
+| Élément | V1 | V2 |
+|---|---|---|
+| Interface web | ✓ | ✗ |
+| Hotspot robot | ✓ | ✗ |
+| Connexion | Hotspot du robot | WiFi commun |
+
 
 ---
 
@@ -70,7 +85,7 @@ pactl set-default-source "NOM_DU_PERIPHERIQUE"
 
 ## Mise en route
 
-### 1. Côté robot - ROS 1
+### 1. Côté robot - ROS 1 (Si QT V1)
 
 Activer dans l'autostart ros_bridge et motor :
 - *start_qt_rosbridge.sh*
@@ -80,13 +95,13 @@ Activer dans l'autostart ros_bridge et motor :
 
 #### Méthode principale (recommandée)
 
-Terminal 1 — Infrastructure :
+Terminal 1 - Infrastructure :
 
 ```bash
 ros2 launch crearobot_brain launch.py
 ```
 
-Terminal 2 — Pilote de l'expérience :
+Terminal 2 - Pilote de l'expérience :
 
 ```bash
 ros2 run crearobot_brain orchestrator
@@ -125,7 +140,8 @@ graph TD
         MAX_LOOPS = 3 ?}
 
         DECIDE -- "NON" --> FEEDBACK["<b>START_FEEDBACK_X</b><br/>C0 : 1 phrase neutre
-        C1 : 2 échanges VLM"]
+        C1 : 2 échanges VLM" 
+        C2 : génération image]
         FEEDBACK --> INC[Tour + 1]
         INC --> DRAW
     end
@@ -151,7 +167,7 @@ graph TD
 | Ice Breaking | `START_ICE_BREAKING` | 3 échanges amicaux pilotés par le LLM |
 | Consignes | `START_TASK_INTRO` | Explication de l'activité TCT-DP |
 | Dessin (×3) | `START_DRAWING_X` | 90s de dessin, tête inclinée vers le dessin (Pitch 20) |
-| Feedback (×2) | `START_FEEDBACK_X` | C0 : phrase neutre / C1 : 2 échanges VLM + Chat |
+| Feedback (×2) | `START_FEEDBACK_X` | C0 : phrase neutre / C1 : 2 échanges VLM + Chat / C2 : génération du dessin|
 | Titre | `START_TITLE` | Analyse VLM finale, génération d'un titre pour le dessin |
 | Conclusion | `START_ENDING` | Au revoir et fin de l'expérience |
 
@@ -220,7 +236,9 @@ Le score total normalisé est la somme des 12 critères normalisés → **max = 
 
 ### Données
 
-`scores_tctdp.csv` — colonnes : `Participant`, `Condition` (C0/C1), `Tranche_age`, 12 critères TCT-DP, `Total`.
+`scores_tctdp.csv` - colonnes : `Participant`, `Condition` (C0/C1), `Tranche_age`, 12 critères TCT-DP, `Total`.
+
+`score_todd.csv` - note de créativité subjective attribuée par Todd Lubart (score expert).
 
 | Tranche d'âge | C0 | C1 | Inclus |
 |---|---|---|---|
@@ -229,8 +247,6 @@ Le score total normalisé est la somme des 12 critères normalisés → **max = 
 | Adolescent | 1 | 1 | ✓ |
 | Adulte | 0 | 3 | ✗ |
 
-Finalement, aucune analyse par tranche d'âge n'a pu être réalisée en raison d'effectifs trop faibles et déséquilibrés.
-
 ### Scripts (`stats/scripts/`)
 
 | Script | Description |
@@ -238,9 +254,10 @@ Finalement, aucune analyse par tranche d'âge n'a pu être réalisée en raison 
 | `t_test.py` | T-test de Welch C0 vs C1 sur le score total brut, retrait outliers |
 | `criteres_scoring.py` | Cohen's d et moyennes normalisées par critère TCT-DP (C0 vs C1) |
 | `analyse_criteres.py` | T-tests bilatéraux par critère normalisé + Cohen's d |
-| `score_expert.py` | Analyse du score expert (Todd Lubart), note de créativité subjective |
+| `score_expert.py` | Analyse du score expert, note de créativité subjective |
 | `pca_clustering.py` | ACP sur les 12 critères normalisés ; scree plot, espace PCA, contributions (cos²) |
-| `clustering_criteres.py` | Clustering K-means (k=4) sur les critères ; profils créatifs A/B/C/D |
+| `clustering_criteres.py` | Clustering K-means (k=5) sur les critères ; profils créatifs A/B/C/D/E |
+| `pca_sensitivity.py` | Analyse de sensibilité PCA : contribution des critères aux composantes (cos²) |
 
 ```bash
 cd stats/scripts/
@@ -259,6 +276,7 @@ python3 nom_script.py
 | `clustering_criteres.png` | `clustering_criteres.py` |
 | `clustering_validation.png` | `clustering_criteres.py` |
 | `clustering_stability.png` | `clustering_criteres.py` |
+| `pca_sensitivity.png` | `pca_sensitivity.py` |
 
 ---
 

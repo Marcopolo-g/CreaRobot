@@ -15,12 +15,9 @@ class GatewayNode(Node):
 
         self.ts = TaskSynchronizer()
 
-        # Connexion au robot (ROS 1)
-        # A changer
-    
-        self.get_logger().info(f'Connexion au robot QT (192.168.100.1)...')
-        #self.ros1_client = roslibpy.Ros(host="192.168.100.1", port=9090)
-        self.ros1_client = roslibpy.Ros(host='192.168.200.1', port=9090)
+        # Connexion au robot (ROS 1)    
+        self.get_logger().info(f'Connexion au robot QT')
+        self.ros1_client = roslibpy.Ros(host="192.168.24.118", port=9091)
         self.ros1_client.run()
 
         # Topic ROS 1 pour le contrôle de la tête
@@ -46,16 +43,13 @@ class GatewayNode(Node):
 
     def setup_robot_voice(self):
         try:
-            self.get_logger().info("Configuration vocale du robot...")
             self.voice_config_srv.call(roslibpy.ServiceRequest({
                 'language': config.VOICE_LANG,
                 'pitch'   : config.VOICE_PITCH,
                 'speed'   : config.VOICE_SPEED
             }))
-            self.volume_srv.call(roslibpy.ServiceRequest({'volume': int(config.VOICE_VOLUME)}))
-            self.get_logger().info("--- ROBOT PRÊT À PARLER ---")
         except Exception as e:
-            self.get_logger().error(f"Erreur config voix : {e}")
+            self.get_logger().error(f"ERREUR voice_config: {e}")
 
     def listener_callback(self, msg):
         try:

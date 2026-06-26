@@ -4,6 +4,7 @@ from std_msgs.msg import String, Bool
 from faster_whisper import WhisperModel
 import numpy as np
 import sounddevice as sd
+import time
 
 
 class STTNode(Node):
@@ -53,6 +54,7 @@ class STTNode(Node):
             return
 
         try:
+            t0 = time.time()
             segments, _ = self.model.transcribe(recording, language="fr", vad_filter=True)
 
             full_text = ""
@@ -65,6 +67,7 @@ class STTNode(Node):
             silence_at_end  = duration_total - last_end
 
             if full_text.strip() and silence_at_end > 0.6:
+                self.get_logger().info(f"[LATENCE] Whisper transcription : {time.time() - t0:.2f} s")
                 final_text = full_text.strip()
                 self.get_logger().info(f"Phrase detectee : {final_text}")
                 msg = String()
