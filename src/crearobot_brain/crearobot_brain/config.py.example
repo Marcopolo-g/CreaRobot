@@ -1,4 +1,10 @@
 # config.py
+import os
+
+# Dossier de sessions — dans crearobot_sessions/ à la racine du repo
+SESSIONS_DIR = os.path.abspath(
+    os.path.join(os.path.dirname(os.path.realpath(__file__)), '..', '..', '..', 'crearobot_sessions')
+)
 
 # --- Configuration API ---
 OPENAI_API_KEY = "YOUR_API_KEY_HERE"
@@ -72,7 +78,7 @@ CONDITION = "C1"
 
 # Mode debug : True pour démarrer directement à la phase DRAWING (skip INTRO/ICE_BREAKING/TASK_INTRO)
 # Taper "skip" dans le terminal de l'orchestrator passe immédiatement en FEEDBACK (skip le timer de dessin)
-DEBUG_SKIP_TO_FEEDBACK = False
+DEBUG_SKIP_TO_FEEDBACK = True
 
 # Choix de la version du test : "A" ou "B" selon le sens d'impression de la feuille TCT-DP (pour C2)
 TEST_SHEET_VERSION = "A"  
@@ -255,5 +261,3 @@ PROMPT_C2_EDIT = (
 
     "Ceci est une bifurcation, pas une correction."
 )
-
-IMAGE_PATH = "last_picture.jpg"

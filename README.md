@@ -8,7 +8,7 @@
 
 Pour garantir une interaction fluide, tous les capteurs (micro, caméra) sont branchés directement sur le PC. La Gateway ne sert plus qu'à envoyer les commandes motrices et vocales au robot.
 
-![Architecture du système CreaRobot](pc_dev/docs/figures/Architecture%20syst%C3%A8me%20CreaRobot.png)
+![Architecture du système CreaRobot](docs/figures/Architecture%20syst%C3%A8me%20CreaRobot.png)
 
 | Couche | Node | Rôle |
 |---|---|---|
@@ -211,10 +211,10 @@ Pour éviter que QT ne s'écoute parler :
 
 ### Journalisation automatique des sessions
 
-À chaque lancement, le système crée automatiquement un dossier de session horodaté dans `pc_dev/crearobot_sessions/` (ignoré par git) :
+À chaque lancement, le système crée automatiquement un dossier de session horodaté dans `crearobot_sessions/` à la racine du repo (ignoré par git) :
 
 ```
-pc_dev/crearobot_sessions/
+crearobot_sessions/
   2026-06-29/
     14-32-05/
       conversation.log   ← transcriptions PARTICIPANT + textes ROBOT
