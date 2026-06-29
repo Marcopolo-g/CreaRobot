@@ -30,28 +30,30 @@ class OrchestratorNode(Node):
         self.input_thread.start()
 
     def terminal_listener(self):
-        # On lit ce qui est ecrit dans le Terminal 2
         while rclpy.ok():
             user_input = sys.stdin.readline().strip().lower()
-            if not user_input: # Arrive si on ferme le terminal
+            if not user_input:
                 break
-            
             if user_input == "fini":
-                # On simule la reception d'un message STT pour declencher la suite
                 msg = String()
                 msg.data = "fini"
                 self.state_machine(msg)
-            
             if user_input == "terminate":
-                # On simule la reception d'un message STT pour declencher la suite
                 msg = String()
                 msg.data = "terminate"
                 self.state_machine(msg)
-
             if user_input == "skip":
                 self.stop_timer()
-                self.get_logger().warn(f"SKIP : passage direct en FEEDBACK depuis {self.state}")
-                self.change_state("FEEDBACK")
+                if self.current_loop >= config.MAX_LOOPS:
+                    self.get_logger().warn(f"SKIP : passage direct en TITLE depuis {self.state}")
+                    self.change_state("TITLE")
+                else:
+                    self.get_logger().warn(f"SKIP : passage direct en FEEDBACK depuis {self.state}")
+                    self.change_state("FEEDBACK")
+            elif user_input == "title":
+                self.stop_timer()
+                self.get_logger().warn("TITLE forcé depuis le terminal")
+                self.change_state("TITLE")
 
     def start_experience(self):
         if self.init_timer:
@@ -66,11 +68,10 @@ class OrchestratorNode(Node):
 
     def state_machine(self, msg):
         text = msg.data.lower()
-        self.get_logger().info(f"[STT→ORCH] état={self.state} | '{text[:60]}'")
 
         if self.state == "INTRO" and any(x in text for x in ["oui", "pret"]):
             self.change_state("ICE_BREAKING")
-        
+
         elif self.state == "DRAWING" and any(x in text for x in ["fini", "terminé", "pret", "terminate"]):
             self.stop_timer()
             if any(x in text for x in ["fini", "terminé", "pret"]):
@@ -78,9 +79,8 @@ class OrchestratorNode(Node):
                     self.change_state("TITLE")
                 else:
                     self.change_state("FEEDBACK")
-            elif any(x in text for x in ["terminate"]):
+            elif "terminate" in text:
                 self.change_state("TITLE")
-
 
     def change_state(self, new_state):
         self.state = new_state

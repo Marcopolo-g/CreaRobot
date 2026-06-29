@@ -357,6 +357,42 @@ Par ailleurs, les versions antérieures du SDK de LuxAI ne sont plus disponibles
 %     de retour pour permettre aux participants de voir les feedbacks de QT.
 %     Ce nœud était spécifique à la configuration de la Science Infuse.
 
+\subsection{Journalisation automatique des sessions expérimentales}
+\label{sec:logging}
+
+% Contexte : lors de l'expérience, on veut pouvoir retrouver après coup
+% la transcription complète de l'échange (ce que dit le participant, ce que
+% dit le robot) et les photos du dessin prises à chaque feedback.
+% Il faut que tout soit dans un seul dossier par session, structuré et horodaté.
+
+% Problème technique : brain_node (logique + log texte) et vision_node
+% (caméra + sauvegarde photos) démarrent à des instants légèrement différents
+% (~3 s d'écart). Si chacun crée son propre dossier horodaté, on se retrouve
+% avec deux dossiers distincts pour la même session.
+
+% Solution retenue : topic latché (QoS TRANSIENT\_LOCAL).
+% brain_node crée le dossier au démarrage et publie son chemin sur
+% /pc/session_dir. vision_node s'abonne à ce topic et utilise le chemin reçu
+% pour créer son sous-dossier dessins/, garantissant l'unicité du dossier.
+
+% Structure du dossier généré :
+% pc_dev/crearobot_sessions/
+%   YYYY-MM-DD/
+%     HH-MM-SS/
+%       conversation.log
+%       dessins/
+%         01_feedback_tour1_HH-MM-SS.jpg
+%         ...
+
+% Contenu de conversation.log :
+% Chaque ligne est horodatée et préfixée PARTICIPANT ou ROBOT.
+% brain_node est abonné à /pc/stt/transcript (STT → transcription)
+% et à /pc/qtaction (commandes robot → extraction du champ texte du JSON).
+
+% Nommage des photos :
+% {index:02d}_{phase}_tour{N}_{HH-MM-SS}.jpg
+% Le nom encode la phase (feedback, title…), le tour et l'heure exacte.
+
 \subsection{Le nœud de projection (\texttt{projection\_node})}
 % Implémenté pour la condition C2 (feedback visuel génératif via HDMI).
 % Non testé lors de la première passation (Science Infuse).

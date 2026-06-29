@@ -1,4 +1,4 @@
-# Projet — Orchestration TCT-DP & IA Générative
+# Orchestration expérience TCT-DP
 
 > QTrobot V1 et V2 (ROS 1 Kinetic et ROS 1 Noetic) transformé en compagnon social intelligent. L'intelligence, la vision et l'audition sont déportées sur PC (ROS 2) pour une réactivité maximale.
 
@@ -8,7 +8,7 @@
 
 Pour garantir une interaction fluide, tous les capteurs (micro, caméra) sont branchés directement sur le PC. La Gateway ne sert plus qu'à envoyer les commandes motrices et vocales au robot.
 
-![Architecture du système CreaRobot](docs/figures/Architecture%20syst%C3%A8me%20CreaRobot.png)
+![Architecture du système CreaRobot](pc_dev/docs/figures/Architecture%20syst%C3%A8me%20CreaRobot.png)
 
 | Couche | Node | Rôle |
 |---|---|---|
@@ -37,7 +37,7 @@ http://192.168.100.1:8080
 http://192.168.100.2:8080
 ```
 
-Workflow de développement — accès direct aux fichiers du robot :
+Workflow de développement, accès direct aux fichiers du robot :
 
 ```bash
 sftp://qtrobot@192.168.100.1/
@@ -208,6 +208,33 @@ Pour éviter que QT ne s'écoute parler :
 
 - **Phase Dessin** : tête inclinée vers le bas (HeadPitch = 20) - attention conjointe sur la feuille
 - **Phase Feedback / Ice Breaking** : tête droite (HeadPitch = 0) - contact visuel avec le participant
+
+### Journalisation automatique des sessions
+
+À chaque lancement, le système crée automatiquement un dossier de session horodaté dans `pc_dev/crearobot_sessions/` (ignoré par git) :
+
+```
+pc_dev/crearobot_sessions/
+  2026-06-29/
+    14-32-05/
+      conversation.log   ← transcriptions PARTICIPANT + textes ROBOT
+      dessins/
+        01_feedback_tour1_14-33-12.jpg
+        02_feedback_tour2_14-41-07.jpg
+        03_title_tour3_14-52-44.jpg
+```
+
+**`conversation.log`** — enregistré par `brain_node`, horodaté au format `HH:MM:SS` :
+```
+=== Session CreaRobot — 2026-06-29 14-32-05 — Condition C1 ===
+
+[14:33:10] PARTICIPANT : j'ai fait un bonhomme avec un chapeau
+[14:33:14] ROBOT       : Oh intéressant ! Tu as pensé à lui donner une expression ?
+```
+
+**`dessins/`** — photos capturées par `vision_node` à chaque déclenchement caméra, nommées `{index}_{phase}_tour{N}_{heure}.jpg`.
+
+**Synchronisation des nœuds** — `brain_node` et `vision_node` démarrent à des instants différents. Pour qu'ils utilisent le même dossier, `brain_node` publie le chemin de session sur le topic `/pc/session_dir` avec une QoS `TRANSIENT_LOCAL` (message latché). `vision_node` s'y abonne et crée son sous-dossier `dessins/` dès réception, quel que soit l'ordre de démarrage.
 
 ---
 

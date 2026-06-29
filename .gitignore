@@ -8,8 +8,9 @@ config.py
 
 .vscode/
 
-# Image du dessin
-last_picture.jpg
+
+# Sessions (logs + photos)
+crearobot_sessions/
 
 # Latex
 *.aux

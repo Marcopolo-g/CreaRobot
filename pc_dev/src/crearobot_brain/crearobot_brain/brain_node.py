@@ -1,6 +1,7 @@
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
+from rclpy.qos import QoSProfile, DurabilityPolicy
 import openai
 import json
 import os
@@ -9,6 +10,7 @@ import io
 import subprocess
 import tempfile
 import time
+import datetime
 import numpy as np
 import cv2
 from sensor_msgs.msg import Image
@@ -38,8 +40,36 @@ class BrainNode(Node):
 
         self.tctdp_template_b64 = self._load_tctdp_template()
         self.tctdp_template_png_buf = self._precompute_template_png()
+
+        # ── Logger de session ─────────────────────────────────────────────────
+        now = datetime.datetime.now()
+        day_str  = now.strftime("%Y-%m-%d")
+        time_str = now.strftime("%H-%M-%S")
+        self.session_dir = os.path.join(
+            config.SESSIONS_DIR, day_str, time_str
+        )
+        os.makedirs(self.session_dir, exist_ok=True)
+        log_path = os.path.join(self.session_dir, "conversation.log")
+        self._log_file = open(log_path, "w", encoding="utf-8")
+        self._log_file.write(
+            f"=== Session CreaRobot — {day_str} {time_str} — Condition {config.CONDITION} ===\n\n"
+        )
+        self._log_file.flush()
+
+        # Publie le chemin de session (latched) pour que vision_node utilise le même dossier
+        _latched_qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
+        self._session_dir_pub = self.create_publisher(String, '/pc/session_dir', _latched_qos)
+        _sd_msg = String()
+        _sd_msg.data = self.session_dir
+        self._session_dir_pub.publish(_sd_msg)
+
+        # Abonnement au transcript participant (pour le log)
+        self.create_subscription(String, '/pc/stt/transcript',   self._log_participant, 10)
+        # Abonnement aux actions robot (pour le log du texte robot)
+        self.create_subscription(String, '/pc/qtaction',         self._log_robot,       10)
+
         self.warmup_llm()
-        self.get_logger().info("Brain Node prêt")
+        self.get_logger().info(f"Brain Node prêt — session : {self.session_dir}")
 
     # ── Gestion des phases ────────────────────────────────────────────────────
 
@@ -309,6 +339,29 @@ class BrainNode(Node):
             self.get_logger().warning(f"Pré-calcul template PNG échoué : {e}")
             return None
 
+    # ── Logger de conversation ────────────────────────────────────────────────
+
+    def _ts(self):
+        return datetime.datetime.now().strftime("%H:%M:%S")
+
+    def _log_participant(self, msg):
+        line = f"[{self._ts()}] PARTICIPANT : {msg.data}\n"
+        self._log_file.write(line)
+        self._log_file.flush()
+
+    def _log_robot(self, msg):
+        try:
+            data = json.loads(msg.data)
+            text = data[2] if len(data) > 2 else ""
+        except Exception:
+            text = msg.data
+        if text and text.strip():
+            line = f"[{self._ts()}] ROBOT       : {text}\n"
+            self._log_file.write(line)
+            self._log_file.flush()
+
+    # ── Utilitaires ───────────────────────────────────────────────────────────
+
     def warmup_llm(self):
         try:
             self.client.chat.completions.create(
@@ -336,6 +389,10 @@ def main(args=None):
     except (KeyboardInterrupt, rclpy.executors.ExternalShutdownException):
         pass
     finally:
+        try:
+            node._log_file.close()
+        except Exception:
+            pass
         if rclpy.ok():
             node.destroy_node()
             rclpy.shutdown()
