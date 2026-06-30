@@ -218,10 +218,13 @@ crearobot_sessions/
   2026-06-29/
     14-32-05/
       conversation.log   ← transcriptions PARTICIPANT + textes ROBOT
-      dessins/
+      dessins/           ← photos du dessin réel (vision_node)
         01_feedback_tour1_14-33-12.jpg
         02_feedback_tour2_14-41-07.jpg
         03_title_tour3_14-52-44.jpg
+      dessins_generes/   ← images IA projetées, condition C2 (projection_node)
+        01_genere_14-33-55.jpg
+        02_genere_14-42-10.jpg
 ```
 
 **`conversation.log`** — enregistré par `brain_node`, horodaté au format `HH:MM:SS` :
@@ -234,7 +237,9 @@ crearobot_sessions/
 
 **`dessins/`** — photos capturées par `vision_node` à chaque déclenchement caméra, nommées `{index}_{phase}_tour{N}_{heure}.jpg`.
 
-**Synchronisation des nœuds** — `brain_node` et `vision_node` démarrent à des instants différents. Pour qu'ils utilisent le même dossier, `brain_node` publie le chemin de session sur le topic `/pc/session_dir` avec une QoS `TRANSIENT_LOCAL` (message latché). `vision_node` s'y abonne et crée son sous-dossier `dessins/` dès réception, quel que soit l'ordre de démarrage.
+**`dessins_generes/`** — images générées par l'IA et projetées sur la feuille (condition C2 uniquement), sauvegardées par `projection_node` à chaque réception sur `/pc/projector/image`.
+
+**Synchronisation des nœuds** — `brain_node` publie le chemin de session sur `/pc/session_dir` avec une QoS `TRANSIENT_LOCAL` (message latché). `vision_node` et `projection_node` s'y abonnent et créent leurs sous-dossiers dès réception, quel que soit l'ordre de démarrage.
 
 ---
 

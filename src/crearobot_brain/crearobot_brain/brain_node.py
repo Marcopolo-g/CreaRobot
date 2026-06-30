@@ -30,6 +30,7 @@ class BrainNode(Node):
         self.chat_history  = []
         self.current_phase = ""
         self.current_tour  = 0
+        self._c1_ready     = False  # True seulement après la 1ère analyse photo du feedback
 
         self.create_subscription(String, '/pc/vision/image_raw_b64', self.process_vision,  10)
         self.create_subscription(String, '/pc/stt/transcript',        self.handle_dialogue, 10)
@@ -78,6 +79,9 @@ class BrainNode(Node):
         self.current_phase = data["phase"]
         self.current_tour  = data["tour"]
 
+        if "START_FEEDBACK" in self.current_phase:
+            self._c1_ready = False  # reset à chaque nouvelle phase de feedback
+
         if "START_ICE_BREAKING" in self.current_phase:
             if not self.chat_history:
                 self.chat_history.append({
@@ -96,6 +100,11 @@ class BrainNode(Node):
         self.get_logger().info("Analyse du dessin en cours...")
         try:
             is_title_phase = "START_TITLE" in self.current_phase
+
+            # C2 feedback : pas besoin de description intermédiaire, on génère l'image directement
+            if config.CONDITION == "C2" and not is_title_phase:
+                self.generate_c2_feedback(msg.data)
+                return
 
             if is_title_phase:
                 prompt = config.PROMPT_TITLE
@@ -165,6 +174,7 @@ class BrainNode(Node):
             self.get_logger().info(f"[LATENCE] GPT C1 feedback : {time.time() - t0:.2f} s")
             text = response.choices[0].message.content
             self.chat_history.append({"role": "assistant", "content": text})
+            self._c1_ready = True  # à partir d'ici, handle_dialogue peut répondre
             self.send_to_robot(text)
 
         except Exception as e:
@@ -264,7 +274,7 @@ class BrainNode(Node):
 
         if not is_feedback and not is_ice_breaking:
             return
-        if is_feedback and not self.visual_memory:
+        if is_feedback and (not self.visual_memory or not self._c1_ready):
             return
 
         user_input = msg.data
@@ -370,7 +380,26 @@ class BrainNode(Node):
                 max_tokens=1
             )
         except Exception as e:
-            self.get_logger().error(f"Echec du warmup : {e}")
+            self.get_logger().error(f"Echec du warmup gpt-4o-mini : {e}")
+
+        if config.CONDITION == "C2":
+            import threading
+            threading.Thread(target=self._warmup_image, daemon=True).start()
+
+    def _warmup_image(self):
+        try:
+            t0 = time.time()
+            white = np.full((1024, 1024, 3), 255, dtype=np.uint8)
+            _, buf = cv2.imencode('.png', white)
+            self.client.images.edit(
+                model="gpt-image-1",
+                image=("warmup.png", io.BytesIO(buf.tobytes()), "image/png"),
+                prompt=".",
+                size="1024x1024",
+                quality="low",
+            )
+        except Exception as e:
+            self.get_logger().warning(f"Warmup gpt-image-1 échoué : {e}")
 
     def send_to_robot(self, text):
         msg = String()

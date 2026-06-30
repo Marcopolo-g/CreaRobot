@@ -258,7 +258,24 @@ Par ailleurs, les versions antérieures du SDK de LuxAI ne sont plus disponibles
 % Prompt de Claudie — interaction ouverte pendant les phases de dessin
 \subsubsection{Condition C2 : feedback visuel génératif (projection)}
 % Implémentée mais non testée lors de la première passation.
-% Incertitude sur son inclusion dans la passation de juin.
+% Pipeline C2 (par feedback) :
+%   1. vision_node capture le dessin → image base64 sur /pc/vision/image_raw_b64
+%   2. brain_node (generate_c2_feedback) : appel GPT-4o-mini avec PROMPT_C2_ANALYSIS
+%      pour décrire le dessin en langage naturel (~6 s).
+%   3. gpt-image-1 (images.edit) utilise la description + l'image originale
+%      + le template TCT-DP pour générer une version augmentée du dessin (~20–63 s).
+%   4. L'image générée est publiée sur /pc/projector/image → projection_node l'affiche.
+%   5. brain_node envoie une phrase de transition orale au robot.
+%
+% Optimisation latence : l'appel GPT-4o-mini de process_vision (description générale
+% → visual_memory, ~2.8 s) est court-circuité en C2 feedback — inutile car
+% generate_c2_feedback fait sa propre description dédiée. process_vision reste actif
+% pour la phase TITLE (génération du titre par analyse visuelle).
+%
+% Cold start gpt-image-1 : le premier appel d'une session peut atteindre ~63 s
+% (allocation GPU côté OpenAI). Un appel de chauffe (image blanche 1024×1024,
+% quality="low") est lancé en thread daemon au démarrage de brain_node pour
+% absorber ce délai avant le premier vrai feedback.
 \subsection{Population cible et critères de scoring TCT-DP}
 % Enfants, jeunes enfants, adolescents, adultes
 % Critères : Ne, Cl, Cn, Pe, Cm, Cth, Uc\_b/d/c, Bfi/d, Hu Tableau existants
@@ -340,6 +357,16 @@ Par ailleurs, les versions antérieures du SDK de LuxAI ne sont plus disponibles
 % Sortie imposée : ["geste", "emotion", "texte"] — compatible gateway direct.
 % Historique de conversation : variables ENABLE\_HISTORY / HISTORY\_LIMIT.
 % Activé uniquement sur signal de interaction\_node (évite l'auto-écoute).
+%
+% Correctif compteur dialogue C1 (_c1_ready) :
+% Un transcript STT résiduel ("fini", prononcé en fin de phase DRAWING) peut
+% arriver dans handle_dialogue après la transition vers START_FEEDBACK, avant
+% que generate_c1_feedback() n'ait produit sa première réponse. Sans garde,
+% ce transcript est traité comme un échange valide et incrémente dialogue_count,
+% rendant le nombre d'échanges inconsistant entre les tours de feedback.
+% Solution : flag _c1_ready initialisé à False à chaque START_FEEDBACK,
+% passé à True uniquement à la fin de generate_c1_feedback(). handle_dialogue
+% ignore tout message reçu tant que _c1_ready est False.
 
 \subsection{La reconnaissance vocale (\texttt{stt\_node})}
 % Nœud sur le PC — micro USB externe (index pactl).
@@ -380,8 +407,11 @@ Par ailleurs, les versions antérieures du SDK de LuxAI ne sont plus disponibles
 %   YYYY-MM-DD/
 %     HH-MM-SS/
 %       conversation.log
-%       dessins/
+%       dessins/                    ← photos du dessin réel (vision_node)
 %         01_feedback_tour1_HH-MM-SS.jpg
+%         ...
+%       dessins_generes/            ← images IA projetées, condition C2 (projection_node)
+%         01_genere_HH-MM-SS.jpg
 %         ...
 
 % Contenu de conversation.log :
@@ -393,11 +423,19 @@ Par ailleurs, les versions antérieures du SDK de LuxAI ne sont plus disponibles
 % {index:02d}_{phase}_tour{N}_{HH-MM-SS}.jpg
 % Le nom encode la phase (feedback, title…), le tour et l'heure exacte.
 
+% Condition C2 : projection_node s'abonne également à /pc/session_dir et
+% sauvegarde chaque image reçue sur /pc/projector/image dans dessins_generes/.
+% Cela permet de retrouver après la session quelle image a été projetée à quel moment.
+
 \subsection{Le nœud de projection (\texttt{projection\_node})}
 % Implémenté pour la condition C2 (feedback visuel génératif via HDMI).
 % Non testé lors de la première passation (Science Infuse).
-% La génération d'image n'est pas encore intégrée — à prévoir si C2
-% est retenu pour la passation de juin.
+% Reçoit les images sur /pc/projector/image (sensor_msgs/Image) et les affiche
+% en plein écran sur le projecteur via OpenCV (cv2.WINDOW_FULLSCREEN).
+% Le projecteur est détecté automatiquement via xrandr ; si absent, la fenêtre
+% s'affiche sur l'écran principal.
+% Sauvegarde chaque image reçue dans dessins_generes/ du dossier de session
+% (voir section~\ref{sec:logging}), permettant de retracer les images projetées.
 
 \subsection{Système de lancement (\texttt{launch.py})}
 % Lance en une commande : gateway, interaction, projection, stt, vision.
@@ -414,6 +452,22 @@ Par ailleurs, les versions antérieures du SDK de LuxAI ne sont plus disponibles
 \subsection{Tests de latence du LLM}
 % Tableaux : cold start vs warm start, effets de max\_tokens et temperature.
 % Warm-up : résolution du "cold start" (~6-7 s → ~1 s).
+%
+% Mesures de latence C2 (N=2–3, conditions réelles) :
+%
+%   Type                        N    Min      Max      Moyenne
+%   GPT-4o-mini vision          3    1.59 s   4.08 s   2.82 s
+%   GPT-4o-mini description C2  2    4.76 s   7.38 s   6.07 s
+%   gpt-image-1 génération      2   20.12 s  63.94 s  42.03 s
+%   C2 total                    2   24.88 s  71.33 s  ~48 s
+%
+% Observations :
+% - La variance de gpt-image-1 est très élevée (×3 entre min et max) ;
+%   le premier appel de session est systématiquement le plus lent (cold start).
+% - Après optimisation (suppression de l'appel GPT vision redondant en C2 feedback),
+%   le total descend à ~22–69 s (gain ~2.8 s par feedback).
+% - Les animations de réflexion du robot (3 phrases espacées de 15 s) masquent
+%   l'attente jusqu'à ~35 s ; au-delà, la latence reste perceptible.
 
 \subsection{Tests de latence du STT}
 % Google Cloud STT : ~0.9 s stable, peu sensible à la longueur de la phrase.

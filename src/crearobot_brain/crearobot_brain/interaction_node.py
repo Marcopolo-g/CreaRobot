@@ -97,7 +97,7 @@ class InteractionNode(Node):
 
         elif "START_TASK_INTRO" in self.current_cmd:
             self.move_head(0, 0)
-            text = "Enfin, assez avec mes questions, revenons à notre activité. Je vais te donner une feuille avec des petites formes dessus. \pau=100\ Ton objectif, c'est de les utiliser pour faire un dessin. \pau=200\ Il n'y a pas de bonne ou de mauvaise réponse. \pau=300\ Si tu as fini avant la fin du temps, tu peux me le dire. \pau=200\ Es-tu prêt ?"            
+            text = "Enfin, assez avec mes questions, revenons à notre activité. Je vais te donner une feuille avec des petites formes dessus. Ton objectif, c'est de les utiliser pour faire un dessin. Il n'y a pas de bonne ou de mauvaise réponse. Si tu as fini avant la fin du temps, tu peux me le dire. Es-tu prêt ?"            
             self.send_robot("None", "None", text)
             # C'est un monologue, on envoie DONE à la fin du temps de parole
             duree = self.calculate_speech_duration(text) + 5.5
@@ -163,44 +163,24 @@ class InteractionNode(Node):
             duree = self.calculate_speech_duration(text)
             self.feedback_timer = self.create_timer(duree, self.finish_feedback_loop)
             
-        elif config.CONDITION == "C1":
-            if self.current_tour == 1:
-                self.send_robot("happy", "happy", "Oh, Faisons une pause dans le dessin que je puisse regarder. Recule un petit peu pour que la caméra puisse bien le voir.")
-            elif self.current_tour == 2:
-                self.send_robot("surprise", "surprise", "Refaisons une pause. Je peux voir où tu en es ? Recule un petit peu pour que la caméra puisse bien voir ton dessin.")
-            elif self.current_tour == 3:
-                self.send_robot("happy", "happy", "J'aimerais beaucoup voir tes dernières touches ! Est-ce que tu peux montrer ton dessin à la caméra une dernière fois pour que je puisse l'admirer ?")
-            #elif self.current_tour == 4:
-            #    self.send_robot("curious", "neutral", "Je suis curieux de voir tout ce que tu as ajouté ! Tu peux reculer un petit peu pour que je voie bien tes progrès ?")
-            self.set_stt(False) # On coupe pendant l'analyse vision
+        elif config.CONDITION in ("C1", "C2"):
+            _phrases = {
+                1: ("happy",    "Oh, Faisons une pause dans le dessin que je puisse regarder. Recule un petit peu pour que la caméra puisse bien le voir."),
+                2: ("surprise", "Refaisons une pause. Je peux voir où tu en es ? Recule un petit peu pour que la caméra puisse bien voir ton dessin."),
+                3: ("happy",    "J'aimerais beaucoup voir tes dernières touches ! Est-ce que tu peux montrer ton dessin à la caméra une dernière fois pour que je puisse l'admirer ?"),
+            }
 
-            wait_time = self.calculate_speech_duration(text) + 7
-
-            if self.photo_timer:
-                self.photo_timer.cancel()
-            self.photo_timer = self.create_timer(wait_time, self.send_camera_trigger)
-            self.get_logger().info(f"Photo programmée dans {wait_time:.2f}s (Phrase: {len(text)} car.)")
-            
-        
-        elif config.CONDITION == "C2":
-            if self.current_tour == 1:
-                text = "Oh, faisons une pause ! Montre-moi ton dessin, je vais l'utiliser pour créer quelque chose de magique !"
-                self.send_robot("happy", "happy", text)
-            elif self.current_tour == 2:
-                text = "Refaisons une pause. Je peux voir où tu en es ? Recule un peu pour que la caméra voie bien ton dessin."
-                self.send_robot("surprise", "surprise", text)
-            elif self.current_tour == 3:
-                text = "Dernière fois ! Montre-moi ton dessin une dernière fois pour ma surprise finale !"
-                self.send_robot("happy", "happy", text)
-            else:
-                text = ""
+            entry = _phrases.get(self.current_tour)
+            if entry:
+                emotion, text = entry
+                self.send_robot(emotion, emotion, text)
 
             self.set_stt(False)
-            wait_time = self.calculate_speech_duration(text) + 3
+            wait_time = self.calculate_speech_duration(text) + 6
             if self.photo_timer:
                 self.photo_timer.cancel()
             self.photo_timer = self.create_timer(wait_time, self.send_camera_trigger)
-            self.get_logger().info(f"[C2] Photo programmée dans {wait_time:.2f}s")
+            self.get_logger().info(f"[{config.CONDITION}] Photo programmée dans {wait_time:.2f}s")
 
     def send_camera_trigger(self):
         """ Callback du timer pour envoyer le trigger caméra """
@@ -215,36 +195,20 @@ class InteractionNode(Node):
 
         # Animations de réflexion pendant la génération (C2 feedback uniquement, pas le titre)
         if config.CONDITION == "C2" and "START_FEEDBACK" in self.current_cmd:
-            phrases_tirees = random.sample(
-                config.C2_PHRASES_THINKING, k=min(3, len(config.C2_PHRASES_THINKING))
-            )
-            while len(phrases_tirees) < 3:
-                phrases_tirees.append(random.choice(config.C2_PHRASES_THINKING))
-            thinking_phrase_1, thinking_phrase_2, thinking_phrase_3 = phrases_tirees
+            emotions = ["bored", "neutral", "bored"]
+            phrases = random.sample(config.C2_PHRASES_THINKING, k=min(3, len(config.C2_PHRASES_THINKING)))
+            while len(phrases) < 3:
+                phrases.append(random.choice(config.C2_PHRASES_THINKING))
 
-            def do_thinking_1():
+            def do_thinking(i=0):
                 if self.animation_timer:
                     self.animation_timer.cancel()
                     self.animation_timer = None
-                self.send_robot("bored", "None", thinking_phrase_1)
-                # Deuxième animation 15s plus tard
-                self.animation_timer = self.create_timer(15.0, do_thinking_2)
+                self.send_robot(emotions[i], "None", phrases[i])
+                if i + 1 < len(phrases):
+                    self.animation_timer = self.create_timer(15.0, lambda: do_thinking(i + 1))
 
-            def do_thinking_2():
-                if self.animation_timer:
-                    self.animation_timer.cancel()
-                    self.animation_timer = None
-                self.send_robot("neutral", "None", thinking_phrase_2)
-                # Troisième animation 15s plus tard (la génération d'image est longue)
-                self.animation_timer = self.create_timer(15.0, do_thinking_3)
-
-            def do_thinking_3():
-                if self.animation_timer:
-                    self.animation_timer.cancel()
-                    self.animation_timer = None
-                self.send_robot("bored", "None", thinking_phrase_3)
-
-            self.animation_timer = self.create_timer(5.0, do_thinking_1)
+            self.animation_timer = self.create_timer(5.0, do_thinking)
 
     def receive_vlm_feedback(self, msg):
         """ Reponse du LLM/VLM recue """

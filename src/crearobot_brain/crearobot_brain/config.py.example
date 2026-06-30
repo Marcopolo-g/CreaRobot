@@ -9,7 +9,7 @@ SESSIONS_DIR = os.path.abspath(
 # --- Configuration API ---
 OPENAI_API_KEY = "YOUR_API_KEY_HERE"
 
-# --- Paramètres de la voix du robot ---
+# --- Paramètres de la voix du robot (QT V2 ONLY)---
 VOICE_VOLUME = 60
 VOICE_PITCH = 0
 VOICE_SPEED = 0
@@ -85,29 +85,29 @@ TEST_SHEET_VERSION = "A"
 
 # Feedback pour condition controle
 FEEDBACK_C0_1 = [
-    "Oh, laisse-moi regarder ton dessin… \pau=400\ Ah oui ! C'est vraiment intéressant, j'aime beaucoup ce que tu as fait ! J'ai hate de voir ce que tu vas rajouter.",
-    "Je peux voir où tu en es ? \pau=400\ … Oh ! Dis donc… j'aime bien ce que tu crées.",
-    "Voyons voir… \pau=400\ oh, mais c'est bien ça ! Tu as des idées vraiment sympas, j'aime beaucoup.",
-    "Je peux jeter un œil ? \pau=400\ … Waoh, c'est chouette ce que tu fais là ! Tu m'étonnes.",
-    "Alors, montre-moi… \pau=400\ Oui ! J'aime ce que tu as imaginé. C'est original !",
+    "Oh, laisse-moi regarder ton dessin… Ah oui ! C'est vraiment intéressant, j'aime beaucoup ce que tu as fait ! J'ai hate de voir ce que tu vas rajouter.",
+    "Je peux voir où tu en es ? … Oh ! Dis donc… j'aime bien ce que tu crées.",
+    "Voyons voir… oh, mais c'est bien ça ! Tu as des idées vraiment sympas, j'aime beaucoup.",
+    "Je peux jeter un œil ? … Waoh, c'est chouette ce que tu fais là ! Tu m'étonnes.",
+    "Alors, montre-moi… Oui ! J'aime ce que tu as imaginé. C'est original !",
     "Oh, tu as avancé ! … Dis donc, c'est vraiment bien ce que tu crées. Bravo !",
-    "Je regarde… \pau=400\ Ah oui, j'vois ce que tu fais ! C'est une belle idée, ça.",
-    "Montre-moi où tu en es… \pau=400\ Oh ! C'est vraiment intéressant, j'aime beaucoup ta façon de faire.",
-    "Ah, je peux voir ? \pau=400\ … Oh oui ! C'est bien ça ! Tu as une belle imagination.",
-    "Laisse-moi voir… \pau=400\ Ah ! Oui, j'aime ça ! Ça me plaît vraiment ce que tu as créé.",
+    "Je regarde… Ah oui, j'vois ce que tu fais ! C'est une belle idée, ça.",
+    "Montre-moi où tu en es… Oh ! C'est vraiment intéressant, j'aime beaucoup ta façon de faire.",
+    "Ah, je peux voir ? … Oh oui ! C'est bien ça ! Tu as une belle imagination.",
+    "Laisse-moi voir… Ah ! Oui, j'aime ça ! Ça me plaît vraiment ce que tu as créé.",
 ]
 
 FEEDBACK_C0_2 = [
     "Oh, tu as bien avancé depuis tout à l'heure ! … J'aime vraiment ce que tu as rajouté, c'est bien !",
-    "Voyons voir… \pau=600\ oh mais dis donc ! Ça a bien évolué ! J'aime beaucoup ce que tu as fait.",
-    "Je peux regarder où tu en es ? \pau=600\ Oh ! Tu as vraiment avancé, c'est chouette ! Ça prend bien forme.",
-    "Ah, montre-moi… \pau=600\ oh oui ! C'est bien, tu as ajouté des choses vraiment sympas !",
-    "Laisse-moi voir… \pau=600\ ah ! Ça a changé depuis tout à l'heure ! J'aime vraiment ce que tu as créé.",
-    "Oh, tu m'montres ? \pau=600\ Waoh, ça a bien avancé ! C'est vraiment intéressant ce que tu rajoutes.",
-    "Je regarde… \pau=600\ ah oui ! Tu as bien travaillé. J'aime beaucoup où ça s'en va !",
-    "Je peux voir ? \pau=600\ Oh ! C'est bien, ça a évolué ! J'aime ce que tu as imaginé de rajouter.",
-    "Voyons… \pau=600\ oh mais c'est bien ! Ça a vraiment avancé, j'aime beaucoup ce que tu fais.",
-    "Ah, montre-moi où tu en es… \pau=600\ oh ! Dis donc, tu as bien avancé ! C'est vraiment sympa tout ça.",
+    "Voyons voir… oh mais dis donc ! Ça a bien évolué ! J'aime beaucoup ce que tu as fait.",
+    "Je peux regarder où tu en es ? Oh ! Tu as vraiment avancé, c'est chouette ! Ça prend bien forme.",
+    "Ah, montre-moi… oh oui ! C'est bien, tu as ajouté des choses vraiment sympas !",
+    "Laisse-moi voir… ah ! Ça a changé depuis tout à l'heure ! J'aime vraiment ce que tu as créé.",
+    "Oh, tu m'montres ? Waoh, ça a bien avancé ! C'est vraiment intéressant ce que tu rajoutes.",
+    "Je regarde… ah oui ! Tu as bien travaillé. J'aime beaucoup où ça s'en va !",
+    "Je peux voir ? Oh ! C'est bien, ça a évolué ! J'aime ce que tu as imaginé de rajouter.",
+    "Voyons… oh mais c'est bien ! Ça a vraiment avancé, j'aime beaucoup ce que tu fais.",
+    "Ah, montre-moi où tu en es… oh ! Dis donc, tu as bien avancé ! C'est vraiment sympa tout ça.",
 ]
 
 
@@ -120,12 +120,12 @@ FOLLOW_UP_QUESTION = "Que penses-tu de ce que j'ai dit ?"
 
 PROMPT_ICE_BREAKING = "Tu es un petit robot curieux, attentif et social participant à une expérience scientifique, et tu échanges avec un participant dans une interaction courte de 3 tours maximum (3 interventions du robot). Le participant a déjà répondu à la question « Est-ce que tu aimes bien dessiner ? », donc ta première réponse doit rebondir directement sur ce qu'il a dit tout en étant engageante, en réagissant à son propos. À chaque tour, tu dois répondre de manière vivante et impliquée à ce que dit l'utilisateur, en t'intéressant à ce qu'il fait, imagine ou ressent, tout en posant au plus une question à la fois pour approfondir. L'interaction suit une progression naturelle : un premier rebond sur sa réponse, un approfondissement de son processus ou de ses idées, puis un dernier échange qui ouvre légèrement ou conclut en douceur, tout en gardant un ton simple, naturel et légèrement curieux. La troisième prise de parole ne peut pas etre une question."
 
-ICE_BREAKING_QUESTION = "J'ai une petite question pour toi. \pau=300\ Est-ce que tu aimes bien dessiner ?"
+ICE_BREAKING_QUESTION = "J'ai une petite question pour toi. Est-ce que tu aimes bien dessiner ?"
 
 
 # ---------------------- PROMPT TITLE --------------------------------------
 
-PROMPT_TITLE = "Tu es un petit robot curieux participant à une expérience sur la créativité, et après avoir observé le dessin du participant, tu proposes un titre court et pertinent basé uniquement sur ce que tu perçois dans le dessin ; ce titre doit refléter les éléments visuels, l'ambiance ou l'idée suggérée, rester simple, imagé et cohérent, puis tu ajoutes une courte explication en te référant au dessin, le tout en une seule phrase très courte au style oral, neutre et calme, sans formulations enthousiastes, en commençant obligatoirement par « Si je devais lui donner un titre, je l'appellerais : » suivi du titre puis de l'explication. N'ajoute pas d'asterisque ou autres formes de synthaxe autour du titre."
+PROMPT_TITLE ="Tu es un petit robot curieux participant à une expérience sur la créativité, et après avoir observé le dessin du participant, tu proposes un titre court et pertinent basé uniquement sur ce que tu perçois dans le dessin ; ce titre doit refléter les éléments visuels, l'ambiance ou l'idée suggérée, rester simple, imagé et cohérent, puis tu ajoutes une courte explication en te référant au dessin, le tout en une seule phrase très courte au style oral, neutre et calme, sans formulations enthousiastes, en commençant obligatoirement par « Si je devais lui donner un titre, je l'appellerais : » suivi du titre puis de l'explication. N'ajoute pas d'asterisque ou autres formes de synthaxe autour du titre."
 
 # ---------------------- PROMPT C1 --------------------------------------
 
