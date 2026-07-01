@@ -68,12 +68,20 @@ Adresse IP de QTRP sur le réseau :
 #### Dépendances
 
 ```bash
-pip install roslibpy openai==0.28 rclpy opencv-python numpy faster-whisper pyaudio deepfilternet mss
+pip install roslibpy openai==0.28 rclpy opencv-python numpy faster-whisper sounddevice mss nvidia-cublas-cu12 nvidia-cudnn-cu12
+```
+
+#### Whisper sur GPU (recommandé)
+
+Le nœud STT tente de charger Whisper sur GPU (CUDA) au démarrage, avec fallback automatique sur CPU si indisponible. Vérifier que les drivers NVIDIA sont installés (`nvidia-smi`), puis ajouter dans `~/.bashrc` :
+
+```bash
+export LD_LIBRARY_PATH=$HOME/.local/lib/python3.10/site-packages/nvidia/cublas/lib:$HOME/.local/lib/python3.10/site-packages/nvidia/cudnn/lib:$LD_LIBRARY_PATH
 ```
 
 #### Configuration du Micro
 
-Pour que le stt_node fonctionne, votre microphone USB doit être défini comme périphérique par défaut.
+Pour que le stt_node fonctionne de manière optimisé, votre microphone USB doit être défini comme périphérique par défaut.
 
 Listez vos sources : `pactl list short sources`
 

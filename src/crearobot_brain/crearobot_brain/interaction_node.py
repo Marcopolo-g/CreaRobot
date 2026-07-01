@@ -176,7 +176,7 @@ class InteractionNode(Node):
                 self.send_robot(emotion, emotion, text)
 
             self.set_stt(False)
-            wait_time = self.calculate_speech_duration(text) + 6
+            wait_time = max(1.0, self.calculate_speech_duration(text) - 1.0)
             if self.photo_timer:
                 self.photo_timer.cancel()
             self.photo_timer = self.create_timer(wait_time, self.send_camera_trigger)
@@ -226,13 +226,11 @@ class InteractionNode(Node):
         
         self.dialogue_count += 1
 
-        # Calcul du temps de parole pour deverrouiller
         duree = self.calculate_speech_duration(msg.data)
-        self.feedback_timer = self.create_timer(duree, self.finish_feedback_loop) 
+        self.feedback_timer = self.create_timer(duree, self.finish_feedback_loop)
            
     def calculate_speech_duration(self, text):
-        # Estimation : 0.074s par caractere + une marge de securite
-        return (len(text) * 0.074) + 0.4
+        return len(text) * 0.074
 
     def stt_callback(self, msg):
         if self.is_busy:

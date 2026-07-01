@@ -9,6 +9,7 @@ import base64
 import io
 import subprocess
 import tempfile
+import glob
 import time
 import datetime
 import numpy as np
@@ -31,6 +32,7 @@ class BrainNode(Node):
         self.current_phase = ""
         self.current_tour  = 0
         self._c1_ready     = False  # True seulement après la 1ère analyse photo du feedback
+        self._c1_robot_turn = 0    # Numéro de prise de parole du robot dans le feedback courant
 
         self.create_subscription(String, '/pc/vision/image_raw_b64', self.process_vision,  10)
         self.create_subscription(String, '/pc/stt/transcript',        self.handle_dialogue, 10)
@@ -80,7 +82,8 @@ class BrainNode(Node):
         self.current_tour  = data["tour"]
 
         if "START_FEEDBACK" in self.current_phase:
-            self._c1_ready = False  # reset à chaque nouvelle phase de feedback
+            self._c1_ready = False
+            self._c1_robot_turn = 0
 
         if "START_ICE_BREAKING" in self.current_phase:
             if not self.chat_history:
@@ -121,8 +124,7 @@ class BrainNode(Node):
                     "apportées par rapport à la description précédente. Sois très précis sur les ajouts."
                 )
 
-            messages = [{"role": "system", "content": ""}]
-            messages.extend(self.chat_history)
+            messages = list(self.chat_history)
             messages.append({
                 "role": "user",
                 "content": [
@@ -151,8 +153,6 @@ class BrainNode(Node):
 
             if config.CONDITION == "C1":
                 self.generate_c1_feedback()
-            elif config.CONDITION == "C2":
-                self.generate_c2_feedback(msg.data)
 
         except Exception as e:
             self.get_logger().error(f"Erreur Vision : {e}")
@@ -161,9 +161,12 @@ class BrainNode(Node):
 
     def generate_c1_feedback(self):
         try:
+            self._c1_robot_turn += 1
+            turn_instruction = self._c1_turn_instruction()
             messages = [{"role": "system", "content": config.PROMPT_C1}]
             messages.extend(self.chat_history)
             messages.append({"role": "system", "content": f"Dessin actuel : {self.visual_memory}"})
+            messages.append({"role": "system", "content": turn_instruction})
 
             t0 = time.time()
             response = self.client.chat.completions.create(
@@ -223,10 +226,9 @@ class BrainNode(Node):
             self.get_logger().info(f"Description GPT : {description}")
 
             edit_prompt = config.PROMPT_C2_EDIT.format(description=description)
-            template_png_buf = self.tctdp_template_png_buf
-            if template_png_buf is not None:
+            if self.tctdp_template_png_buf is not None:
                 images_for_edit = [
-                    ("template.png", io.BytesIO(template_png_buf.tobytes()), "image/png"),
+                    ("template.png", io.BytesIO(self.tctdp_template_png_buf.tobytes()), "image/png"),
                     ("drawing.png", io.BytesIO(img_png_buf.tobytes()), "image/png"),
                 ]
             else:
@@ -282,8 +284,11 @@ class BrainNode(Node):
         if is_ice_breaking:
             messages = [{"role": "system", "content": config.PROMPT_ICE_BREAKING}]
         else:
+            self._c1_robot_turn += 1
+            turn_instruction = self._c1_turn_instruction()
             messages = [{"role": "system", "content": config.PROMPT_C1}]
             messages.append({"role": "system", "content": f"Memoire visuelle : {self.visual_memory}"})
+            messages.append({"role": "system", "content": turn_instruction})
 
         messages.extend(self.chat_history[-6:])
         messages.append({"role": "user", "content": user_input})
@@ -315,7 +320,6 @@ class BrainNode(Node):
         ]
         pdf_path = next((c for c in candidats if os.path.exists(c)), candidats[0])
         try:
-            import glob
             with tempfile.TemporaryDirectory() as tmpdir:
                 # 75 DPI suffit pour l'analyse gpt-4o-mini (positions des éléments)
                 subprocess.run(
@@ -370,7 +374,10 @@ class BrainNode(Node):
             self._log_file.write(line)
             self._log_file.flush()
 
-    # ── Utilitaires ───────────────────────────────────────────────────────────
+    def _c1_turn_instruction(self):
+        if self._c1_robot_turn >= config.MAX_EXCHANGES:
+            return "C'est ta DERNIÈRE prise de parole. Conclus en une phrase chaleureuse. INTERDICTION de poser une question."
+        return "Tu DOIS terminer ta réponse par une question ouverte et courte."
 
     def warmup_llm(self):
         try:

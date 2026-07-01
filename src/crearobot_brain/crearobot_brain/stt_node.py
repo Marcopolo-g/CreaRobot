@@ -17,13 +17,15 @@ class STTNode(Node):
         self.enabled         = False
         self.robot_speaking  = False  # prioritaire sur enabled
         self.audio_buffer    = []
+        self._mic_open_logged = False
 
-        self.get_logger().info("Chargement de Whisper BASE sur CPU...")
         try:
+            self.model = WhisperModel("base", device="cuda", compute_type="float16")
+            self.get_logger().info("--- WHISPER GPU PRET ---")
+        except Exception:
+            self.get_logger().warning("GPU non disponible — fallback CPU")
             self.model = WhisperModel("base", device="cpu", compute_type="int8")
             self.get_logger().info("--- WHISPER CPU PRET ---")
-        except Exception as e:
-            self.get_logger().error(f"Erreur : {e}")
 
     @property
     def _listening(self):
@@ -38,7 +40,9 @@ class STTNode(Node):
         self.robot_speaking = msg.data
         if msg.data:
             self.audio_buffer = []
-        elif self.enabled:
+            self._mic_open_logged = False
+        elif self.enabled and not self._mic_open_logged:
+            self._mic_open_logged = True
             self.get_logger().info("Micro ouvert — en écoute")
 
     def audio_callback(self, indata, frames, time, status):
@@ -66,7 +70,7 @@ class STTNode(Node):
             duration_total  = len(recording) / 16000
             silence_at_end  = duration_total - last_end
 
-            if full_text.strip() and silence_at_end > 0.6:
+            if full_text.strip() and silence_at_end > 0.8:
                 self.get_logger().info(f"[LATENCE] Whisper transcription : {time.time() - t0:.2f} s")
                 final_text = full_text.strip()
                 self.get_logger().info(f"Phrase detectee : {final_text}")
