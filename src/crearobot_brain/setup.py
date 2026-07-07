@@ -28,6 +28,7 @@ setup(
             'vision = crearobot_brain.vision_node:main',
             'vision_temp = crearobot_brain.vision_node_temp:main',
             'stt = crearobot_brain.stt_node:main',
+            'drawing_detector = crearobot_brain.drawing_detector_node:main',
         ],
     },
 )

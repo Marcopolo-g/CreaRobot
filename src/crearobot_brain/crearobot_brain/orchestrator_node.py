@@ -1,6 +1,6 @@
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import String, Int32
+from std_msgs.msg import String, Int32, Bool
 import json
 import sys
 import threading
@@ -22,6 +22,7 @@ class OrchestratorNode(Node):
 
         self.interaction_finished_sub = self.create_subscription(String, '/pc/interaction_finished', self.on_interaction_done, 10)
         self.speech_sub = self.create_subscription(String, '/pc/stt/transcript', self.state_machine, 10)
+        self.create_subscription(Bool, '/pc/vision/drawing_stopped', self.on_drawing_stopped, 10)
 
         self.phase_timer = None
         self.init_timer = self.create_timer(2.0, self.start_experience)
@@ -105,6 +106,11 @@ class OrchestratorNode(Node):
     def start_draw_timer(self):
         self.stop_timer()
         self.phase_timer = self.create_timer(config.DRAW_DURATION, self.on_draw_timeout)
+
+    def on_drawing_stopped(self, msg):
+        if msg.data and self.state == "DRAWING":
+            self.get_logger().info("DrawingDetector : fin de dessin détectée — transition de phase")
+            self.on_draw_timeout()
 
     def on_draw_timeout(self):
         self.stop_timer()

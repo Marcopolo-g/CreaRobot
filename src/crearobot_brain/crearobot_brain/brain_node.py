@@ -25,7 +25,7 @@ class BrainNode(Node):
 
     def __init__(self):
         super().__init__('brain_node')
-        self.client = openai.OpenAI(api_key=config.OPENAI_API_KEY)
+        self.client = openai.OpenAI(api_key=config.OPENAI_API_KEY, timeout=90.0)
 
         self.visual_memory = ""
         self.chat_history  = []
@@ -104,9 +104,17 @@ class BrainNode(Node):
         try:
             is_title_phase = "START_TITLE" in self.current_phase
 
-            # C2 feedback : pas besoin de description intermédiaire, on génère l'image directement
             if config.CONDITION == "C2" and not is_title_phase:
-                self.generate_c2_feedback(msg.data)
+                c2_messages = [{"role": "user", "content": [
+                    {"type": "text", "text": config.PROMPT_C2_ANALYSIS},
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{msg.data}"}}
+                ]}]
+                t0 = time.time()
+                c2_resp = self.client.chat.completions.create(
+                    model="gpt-4o-mini", messages=c2_messages, max_tokens=100
+                )
+                self.get_logger().info(f"[LATENCE] GPT vision C2 : {time.time() - t0:.2f} s")
+                self.generate_c2_feedback(msg.data, c2_resp.choices[0].message.content)
                 return
 
             if is_title_phase:
@@ -185,46 +193,16 @@ class BrainNode(Node):
 
     # ── Feedback C2 (génération d'image) ───────────────────────────────
 
-    def _pad_to_square(self, img_cv):
-        """ Ajoute des bordures blanches pour obtenir un carre, puis redimensionne en 1024x1024 """
-        h, w = img_cv.shape[:2]
-        size = max(h, w)
-        pad_top    = (size - h) // 2
-        pad_bottom = size - h - pad_top
-        pad_left   = (size - w) // 2
-        pad_right  = size - w - pad_left
-        img_sq = cv2.copyMakeBorder(
-            img_cv, pad_top, pad_bottom, pad_left, pad_right,
-            cv2.BORDER_CONSTANT, value=(255, 255, 255)
-        )
-        return cv2.resize(img_sq, (1024, 1024))
-
-    def generate_c2_feedback(self, base64_image):
+    def generate_c2_feedback(self, base64_image, description=""):
         try:
             self.get_logger().info("Génération image C2...")
 
-            # ── Décoder et mettre en carré 1024x1024 (requis par gpt-image-1) ──
             img_raw = base64.b64decode(base64_image)
             img_arr = np.frombuffer(img_raw, dtype=np.uint8)
             img_cv  = cv2.imdecode(img_arr, cv2.IMREAD_COLOR)
-            img_sq  = self._pad_to_square(img_cv)
-            _, img_png_buf = cv2.imencode('.png', img_sq)
+            _, img_png_buf = cv2.imencode('.png', img_cv)
 
-            # ── GPT-4o-mini : description du dessin pour contextualiser gpt-image-1 ──
             t0 = time.time()
-            description = self.client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {"role": "system", "content": config.PROMPT_C2_ANALYSIS},
-                    {"role": "user", "content": [
-                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
-                    ]}
-                ],
-                max_tokens=350
-            ).choices[0].message.content
-            self.get_logger().info(f"[LATENCE] GPT-4o-mini description : {time.time() - t0:.2f} s")
-            self.get_logger().info(f"Description GPT : {description}")
-
             edit_prompt = config.PROMPT_C2_EDIT.format(description=description)
             if self.tctdp_template_png_buf is not None:
                 images_for_edit = [
@@ -237,28 +215,28 @@ class BrainNode(Node):
             # ── gpt-image-1 edit sans masque ─────────────────────────────────
             # input_fidelity="high" : preserve fidelement les details de l'image d'entree
             # (formes, traits) au lieu de laisser le modele les redessiner/deformer
-            t1 = time.time()
             image_response = self.client.images.edit(
                 model="gpt-image-1",
                 image=images_for_edit,
                 prompt=edit_prompt,
-                size="1024x1024",
+                size="auto",
                 quality="low",
-                input_fidelity="high"
+                input_fidelity="high",
             )
-            self.get_logger().info(f"[LATENCE] gpt-image-1 génération : {time.time() - t1:.2f} s")
-            self.get_logger().info(f"[LATENCE] C2 total (description + image) : {time.time() - t0:.2f} s")
+            self.get_logger().info(f"[LATENCE] gpt-image-1 génération : {time.time() - t0:.2f} s")
             img_bytes   = base64.b64decode(image_response.data[0].b64_json)
             img_out_arr = np.frombuffer(img_bytes, dtype=np.uint8)
             img_decoded = cv2.imdecode(img_out_arr, cv2.IMREAD_COLOR)
 
+            img_proj = cv2.resize(img_decoded, (1920, 1080))
+
             # ── Publier vers le projecteur ────────────────────────────────────
             ros_img              = Image()
             ros_img.header.stamp = self.get_clock().now().to_msg()
-            ros_img.height, ros_img.width = img_decoded.shape[:2]
+            ros_img.height, ros_img.width = img_proj.shape[:2]
             ros_img.encoding     = 'bgr8'
             ros_img.step         = ros_img.width * 3
-            ros_img.data         = img_decoded.tobytes()
+            ros_img.data         = img_proj.tobytes()
             self.image_pub.publish(ros_img)
             self.get_logger().info("Image generee et envoyee au projecteur")
 
@@ -345,9 +323,8 @@ class BrainNode(Node):
             tpl_raw = base64.b64decode(self.tctdp_template_b64)
             tpl_arr = np.frombuffer(tpl_raw, dtype=np.uint8)
             tpl_cv  = cv2.imdecode(tpl_arr, cv2.IMREAD_COLOR)
-            tpl_sq  = self._pad_to_square(tpl_cv)
-            _, buf = cv2.imencode('.png', tpl_sq)
-            self.get_logger().info("Template TCT-DP pré-calculé en PNG 1024x1024")
+            _, buf = cv2.imencode('.png', tpl_cv)
+            self.get_logger().info(f"Template TCT-DP pré-calculé en PNG {tpl_cv.shape[1]}x{tpl_cv.shape[0]}")
             return buf
         except Exception as e:
             self.get_logger().warning(f"Pré-calcul template PNG échoué : {e}")
@@ -397,16 +374,20 @@ class BrainNode(Node):
         try:
             t0 = time.time()
             white = np.full((1024, 1024, 3), 255, dtype=np.uint8)
-            _, buf = cv2.imencode('.png', white)
+            _, white_buf = cv2.imencode('.png', white)
+            images = [("drawing.png", io.BytesIO(white_buf.tobytes()), "image/png")]
+            if self.tctdp_template_png_buf is not None:
+                images.insert(0, ("template.png", io.BytesIO(self.tctdp_template_png_buf.tobytes()), "image/png"))
             self.client.images.edit(
                 model="gpt-image-1",
-                image=("warmup.png", io.BytesIO(buf.tobytes()), "image/png"),
+                image=images,
                 prompt=".",
                 size="1024x1024",
                 quality="low",
             )
+            self.get_logger().info(f"[WARMUP] gpt-image-1 OK ({time.time() - t0:.1f}s)")
         except Exception as e:
-            self.get_logger().warning(f"Warmup gpt-image-1 échoué : {e}")
+            self.get_logger().warning(f"[WARMUP] gpt-image-1 échoué : {e}")
 
     def send_to_robot(self, text):
         msg = String()

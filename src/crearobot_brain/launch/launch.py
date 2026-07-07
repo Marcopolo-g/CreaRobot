@@ -55,7 +55,7 @@ def generate_launch_description():
         output='screen'
     )
 
-    # Brain (Dialogue sur le dessin avec le sujet)
+    # Brain (Dialogue sur le dessin avec le participant)
     brain = Node(
         package='crearobot_brain',
         executable='brain',
@@ -63,7 +63,16 @@ def generate_launch_description():
         output='screen'
     )
 
-    nodes_to_run = [gateway, stt, interaction, brain, vision]
+    # Drawing detection (Detecte si le participant a fini de dessiner)
+    drawing_detector = Node(
+        package='crearobot_brain',
+        executable='drawing_detector',
+        name='drawing_detector_node',
+        output='screen'
+    ) 
+    
+    
+    nodes_to_run = [gateway, stt, interaction, brain, vision, drawing_detector]
 
     if config.CONDITION == "C2":
         nodes_to_run.append(projection)

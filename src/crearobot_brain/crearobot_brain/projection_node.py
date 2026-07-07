@@ -75,11 +75,7 @@ class ProjectionNode(Node):
         if self.current_image is not None:
             cv2.imshow(self.window_name, self.current_image)
         else:
-            # On affiche du noir en attendant une image
-            # Si ton projecteur a une résolution différente, tu peux ajuster (1080, 1920)
-            black_screen = np.zeros((1080, 1920, 3), dtype=np.uint8)
-            cv2.imshow(self.window_name, black_screen)
-        
+            cv2.imshow(self.window_name, np.zeros((1080, 1920, 3), dtype=np.uint8))
         cv2.waitKey(1)
 
 def main(args=None):
