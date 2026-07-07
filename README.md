@@ -8,7 +8,7 @@
 
 Pour garantir une interaction fluide, tous les capteurs (micro, caméra) sont branchés directement sur le PC. La Gateway ne sert plus qu'à envoyer les commandes motrices et vocales au robot.
 
-![Architecture du système CreaRobot](docs/figures/Architecture%20syst%C3%A8me%20CreaRobot.png)
+![Architecture du système CreaRobot](docs/figures/Architecture_système_CreaRobot.png)
 
 | Couche | Node | Rôle |
 |---|---|---|
@@ -17,6 +17,7 @@ Pour garantir une interaction fluide, tous les capteurs (micro, caméra) sont br
 | Audition | `stt_node` | Capture micro local + STT local (Faster-Whisper) |
 | Vision | `vision_node` | Flux local via caméra USB externe |
 | Vision démo | `vision_node_temp` | Mode Science Infuse : capture d'écran HDMI (via mss) |
+| Détection dessin | `drawing_detector_node` | Détecte la fin du dessin par frame differencing + médiane glissante |
 | Cognition | `brain_node` | LLM/VLM : analyse texte et image, génère les réponses |
 | Projection | `projection_node` | Affiche le visuel du dessin sur le projecteur HDMI (C2) |
 | Passerelle | `gateway_node` | Bridge ROS 1 ↔ ROS 2 via WebSocket (rosbridge :9091) |
@@ -124,8 +125,9 @@ ros2 run crearobot_brain brain
 ros2 run crearobot_brain gateway
 ros2 run crearobot_brain projection
 ros2 run crearobot_brain stt
-ros2 run crearobot_brain vision        # caméra USB
-ros2 run crearobot_brain vision_temp   # capture écran HDMI
+ros2 run crearobot_brain vision            # caméra USB
+ros2 run crearobot_brain vision_temp       # capture écran HDMI
+ros2 run crearobot_brain drawing_detector 
 ```
 
 ---
@@ -134,29 +136,20 @@ ros2 run crearobot_brain vision_temp   # capture écran HDMI
 
 ```mermaid
 graph TD
-    INTRO[<b>START_INTRO</b><br/>Accueil du participant]
+    INTRO[START_INTRO] -->|Timeout| ICE[START_ICE_BREAKING]
+    ICE -->|DONE| TASK[START_TASK_INTRO]
+    TASK -->|Timeout| DRAW
 
-    INTRO -- "Timeout" --> ICE[<b>START_ICE_BREAKING</b><br/>3 échanges amicaux]
-
-    ICE -- "DONE" --> TASK[<b>START_TASK_INTRO</b><br/>Explication des consignes]
-
-    TASK -- "Timeout" --> DRAW
-
-    subgraph "Cycle Principal (MAX_LOOPS Tours)"
-        DRAW["<b>START_DRAWING_X</b><br/>(90s)"]
-        DRAW --> DECIDE{Tour X =
-        MAX_LOOPS = 3 ?}
-
-        DECIDE -- "NON" --> FEEDBACK["<b>START_FEEDBACK_X</b><br/>C0 : 1 phrase neutre
-        C1 : 2 échanges VLM" 
-        C2 : génération image]
-        FEEDBACK --> INC[Tour + 1]
+    subgraph Cycle["Cycle Principal - MAX_LOOPS Tours"]
+        DRAW[START_DRAWING_X 90s]
+        DRAW --> DECIDE{Dernier tour}
+        DECIDE -->|NON| FEEDBACK[START_FEEDBACK_X]
+        FEEDBACK --> INC[Tour suivant]
         INC --> DRAW
     end
 
-    DECIDE -- "OUI" --> TITLE["<b>START_TITLE</b><br/>Analyse VLM & Titre final"]
-
-    TITLE -- "DONE" --> ENDING["<b>START_ENDING</b><br/>Au revoir"]
+    DECIDE -->|OUI| TITLE[START_TITLE]
+    TITLE -->|DONE| ENDING[START_ENDING]
 
     style INTRO fill:#f9f,stroke:#333,color:#000
     style ICE fill:#fff4dd,stroke:#333,color:#000
@@ -174,7 +167,7 @@ graph TD
 | Introduction | `START_INTRO` | Accueil du participant, présentation du robot |
 | Ice Breaking | `START_ICE_BREAKING` | 3 échanges amicaux pilotés par le LLM |
 | Consignes | `START_TASK_INTRO` | Explication de l'activité TCT-DP |
-| Dessin (×3) | `START_DRAWING_X` | 90s de dessin, tête inclinée vers le dessin (Pitch 20) |
+| Dessin (×3) | `START_DRAWING_X` | 90s de dessin, tête inclinée vers le dessin |
 | Feedback (×2) | `START_FEEDBACK_X` | C0 : phrase neutre / C1 : 2 échanges VLM + Chat / C2 : génération du dessin|
 | Titre | `START_TITLE` | Analyse VLM finale, génération d'un titre pour le dessin |
 | Conclusion | `START_ENDING` | Au revoir et fin de l'expérience |
@@ -192,9 +185,21 @@ La classe `TaskSynchronizer` (basée sur `asyncio`) déclenche simultanément :
 
 Un correctif dynamique soustrait le temps de chargement de l'émotion à la durée d'animation de la bouche.
 
+### Détection automatique de fin de dessin
+
+Le `drawing_detector_node` surveille la caméra en continu pendant la phase de dessin et détecte quand le participant arrête de dessiner, via **frame differencing avec médiane glissante** :
+
+- À chaque tick (toutes les `FRAME_DIFF_INTERVAL` secondes), deux frames consécutives sont comparées (`cv2.absdiff`)
+- Le nombre de pixels différents est ajouté à une fenêtre glissante de `FRAME_DIFF_WINDOW_SIZE` ticks
+- Si la **médiane** de la fenêtre est sous `FRAME_DIFF_PIXEL_THRESHOLD`, la période est considérée comme calme
+- Après `FRAME_DIFF_INACTIVITY_DURATION` secondes consécutives de calme, un `Bool(True)` est publié sur `/pc/vision/drawing_stopped`
+- L'`orchestrator_node` reçoit ce signal et déclenche immédiatement la transition de phase (comme si le timer avait expiré)
+
+La médiane est préférée à une simple valeur instantanée pour absorber les pics ponctuels (toussotement, micro-mouvement). Le timer `DRAW_DURATION` reste le mécanisme principal ; le détecteur permet de terminer plus tôt si le participant retire sa main du cadre.
+
 ### Vision & projection
 
-Le `vision_node` récupère un flux local via caméra USB. Le `projection_node` utilise OpenCV pour mapper une fenêtre plein écran sur la sortie HDMI du projecteur (condition C2).
+Le `vision_node` récupère un flux local via caméra USB (index configurable via `CAMERA_INDEX`). Le `projection_node` utilise OpenCV pour mapper une fenêtre plein écran sur la sortie HDMI du projecteur (condition C2).
 
 ### Audition déportée - STT
 

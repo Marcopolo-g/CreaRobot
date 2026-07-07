@@ -50,7 +50,7 @@ class VisionNode(Node):
             self.get_logger().info("Trigger reçu, capture de l'image...")
             
             # Ouverture de la caméra 
-            cap = cv2.VideoCapture(2) 
+            cap = cv2.VideoCapture(config.CAMERA_INDEX)
 
             if not cap.isOpened():
                 self.get_logger().error("ÉCHEC : Caméra inaccessible (vérifie l'index ou le branchement).")

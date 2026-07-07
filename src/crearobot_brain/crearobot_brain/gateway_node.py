@@ -50,6 +50,10 @@ class GatewayNode(Node):
             }))
         except Exception as e:
             self.get_logger().error(f"ERREUR voice_config: {e}")
+        try:
+            self.volume_srv.call(roslibpy.ServiceRequest({'volume': int(config.VOICE_VOLUME)}))
+        except Exception as e:
+            self.get_logger().error(f"ERREUR setVolume: {e}")
 
     def listener_callback(self, msg):
         try:

@@ -384,6 +384,41 @@ Par ailleurs, les versions antérieures du SDK de LuxAI ne sont plus disponibles
 %     de retour pour permettre aux participants de voir les feedbacks de QT.
 %     Ce nœud était spécifique à la configuration de la Science Infuse.
 
+\subsection{Détection automatique de fin de dessin (\texttt{drawing\_detector\_node})}
+\label{sec:drawing_detector}
+
+% Problème : savoir quand le participant a fini de dessiner sans lui demander explicitement.
+% Le timer fixe (DRAW_DURATION = 90s) est le mécanisme principal, mais un mécanisme
+% complémentaire permet de terminer la phase plus tôt si le participant a clairement fini.
+
+% Approche retenue : frame differencing avec médiane glissante.
+% À chaque tick (FRAME_DIFF_INTERVAL = 1s), le nœud compare deux frames consécutives
+% via cv2.absdiff et compte le nombre de pixels différents (moved_px).
+% Cette valeur est ajoutée à une fenêtre glissante de FRAME_DIFF_WINDOW_SIZE = 6 ticks.
+% La médiane de cette fenêtre est comparée à FRAME_DIFF_PIXEL_THRESHOLD (≈ 9000 px).
+% Si la médiane reste sous ce seuil pendant FRAME_DIFF_INACTIVITY_DURATION = 12s,
+% un Bool(True) est publié sur /pc/vision/drawing_stopped.
+% L'orchestrateur reçoit ce signal et appelle on_draw_timeout() comme si le timer avait expiré.
+
+% Pourquoi la médiane et non une valeur instantanée ?
+% Le frame differencing est sensible aux pics ponctuels (éclairage, micro-mouvement,
+% toussotement). La médiane sur N ticks absorbe ces faux positifs : un seul pic élevé
+% ne réinitialise pas le compteur d'inactivité si toutes les autres valeurs sont basses.
+
+% Limite principale : impossible de distinguer "réfléchir avec la main dans le cadre"
+% de "dessiner activement". La main en mouvement génère autant de diff que le crayon.
+% Solutions envisagées et écartées :
+%   - Masquage de la couleur de peau (HSV) : non retenu (non inclusif).
+%   - Comptage de pixels très noirs (traits de marqueur) : non retenu (problème identique
+%     pour les participants à la peau foncée).
+% Solution opérationnelle : consigne donnée oralement au participant de retirer sa main
+% du cadre pour signaler la fin. Le timer DRAW_DURATION reste le mécanisme principal.
+
+% Gestion de la caméra : le nœud ouvre la caméra uniquement pendant la phase DRAWING
+% (sur réception de START_DRAWING via /pc/phase_control) et la libère immédiatement après.
+% Un flush de buffer (5× cap.grab() + cap.retrieve()) garantit que la frame analysée
+% est bien la plus récente et non une frame en attente dans le buffer interne d'OpenCV.
+
 \subsection{Journalisation automatique des sessions expérimentales}
 \label{sec:logging}
 
@@ -438,8 +473,10 @@ Par ailleurs, les versions antérieures du SDK de LuxAI ne sont plus disponibles
 % (voir section~\ref{sec:logging}), permettant de retracer les images projetées.
 
 \subsection{Système de lancement (\texttt{launch.py})}
-% Lance en une commande : gateway, interaction, projection, stt, vision.
+% Lance en une commande : gateway, interaction, brain, stt, vision, drawing_detector.
+% La condition C2 ajoute automatiquement projection_node à la liste.
 % L'orchestrateur se lance séparément (terminal dédié pour contrôle manuel).
+% drawing_detector est lancé systématiquement ; il reste inactif hors phase DRAWING.
 
 \newpage
 

@@ -9,13 +9,13 @@ SESSIONS_DIR = os.path.abspath(
 # --- Configuration API ---
 OPENAI_API_KEY = "YOUR_API_KEY_HERE"
 
-# --- Paramètres de la voix du robot (QT V2 ONLY)---
-VOICE_VOLUME = 60
+# --- Paramètres de la voix du robot ---
+VOICE_VOLUME = 10
 VOICE_PITCH = 0
 VOICE_SPEED = 0
 VOICE_LANG = "fr-FR"
 
-# --- Smileys vocaux Acapela ---
+# --- Smileys vocaux Acapela (QT V2 ONLY) ---
 LISTE_VOCAL_SMILEYS = [
     "#MUM_CALLING#", "#DAD_CALLING#", "#MUM_WHINING#", "#DAD_WHINING#",
     "#MUM_QUESTIONING#", "#DAD_QUESTIONING#", "#MUM_WHEEDLING#", "#DAD_WHEEDLING#",
@@ -63,6 +63,9 @@ LISTE_EMOTIONS = [
     "with_a_cold_sneezing", "yawn"
 ]
 
+# --- Caméra ---
+CAMERA_INDEX = 2
+
 # Parametres generales de l'exp
 MAX_LOOPS = 3 # Nombre de fois qu'on dessine
 DRAW_DURATION = 90.0 # 1 minutes 30 (90s)
@@ -75,6 +78,12 @@ HISTORY_LIMIT = 3 # Nombre de derniers échanges à retenir
 
 # Choix de la condition : "C0", "C1" ou "C2"
 CONDITION = "C1"
+
+# --- Détection fin de dessin (frame differencing + médiane) ---
+FRAME_DIFF_INTERVAL            = 1.0   # secondes entre deux captures
+FRAME_DIFF_PIXEL_THRESHOLD     = 10000  # médiane des pixels différents sur la fenêtre = mouvement significatif
+FRAME_DIFF_INACTIVITY_DURATION = 12.0   # secondes sans mouvement → fin de dessin
+FRAME_DIFF_WINDOW_SIZE         = 6     # taille de la fenêtre glissante pour la médiane
 
 # Mode debug : True pour démarrer directement à la phase DRAWING (skip INTRO/ICE_BREAKING/TASK_INTRO)
 # Taper "skip" dans le terminal de l'orchestrator passe immédiatement en FEEDBACK (skip le timer de dessin)
@@ -196,7 +205,7 @@ La discussion dure 2 échanges. Ta première action est une question. Ta deuxiè
 
 # Phrases de reflexion prononcees ~5s apres la photo, pendant que l'image se genere
 C2_PHRASES_THINKING = [
-    "Hmm... je reflechis.",
+    "#MMM01# je reflechis.",
     "Laisse-moi imaginer quelque chose...",
     "Je cherche une idee...",
     "Encore un petit instant, je peaufine les details...",
@@ -212,12 +221,16 @@ C2_PHRASES_INVITE = [
 
 
 PROMPT_C2_ANALYSIS = (
-    "Decris precisement et exhaustivement ce que tu vois dans ce dessin. "
-    "Pour chaque element visible, indique : ce que c'est ou ce que ca semble representer, sa position sur la feuille (haut/bas/gauche/droite/centre, interieur ou exterieur du cadre carre), et sa taille approximative par rapport au cadre. "
-    "Sois factuel et precis — decris ce qui est reellement trace, pas ce que tu imagines ou interpretes."
+    "En 2-3 phrases maximum, decris l'INTENTION du participant : ce qu'il a voulu representer et comment il a utilise les formes du test. "
+    "Concentre-toi sur le sens (ex : 'le carre est utilise comme tete d'un personnage', 'les tirets sont les cheveux'). "
+    "Ne decris pas les details graphiques, les positions ou les tailles — sois bref et semantique."
 )
 
 PROMPT_C2_EDIT = (
+    "CONTEXTE — INTENTION DU PARTICIPANT (information secondaire) : {description} "
+    "Utilise cette description UNIQUEMENT pour comprendre le sens du dessin (ex : 'le carre est la tete du personnage'). "
+    "Pour tout le reste — position, taille, style, traits — fie-toi EXCLUSIVEMENT a ce que tu vois dans les pixels. Les pixels sont la verite, la description peut etre imprecise. "
+
     "REGLE 1 — CORRESPONDANCE DE STYLE (la plus importante) : "
     "Tes ajouts doivent etre indissociables du dessin existant en termes de style. "
     "Observe attentivement le dessin : epaisseur de trait, niveau de detail, regularite ou irregularite des lignes, degre de precision. Reproduis exactement ces caracteristiques dans tes ajouts. "
@@ -228,6 +241,7 @@ PROMPT_C2_EDIT = (
     "Ne l'etire pas, ne le rends pas plus haut ou plus large, ne le deplace pas, ne le redimensionne pas. Ses proportions, sa taille et sa position ne doivent pas changer. "
     "Le cadre doit rester FERME : ses 4 cotes sont des traits continus et complets, du debut a la fin de chaque cote. Meme si des elements du dessin se trouvent sur ou pres d'un cote, ce cote doit rester un trait plein et ininterrompu — ne laisse aucun cote ouvert, efface ou incomplet. "
     "Le cadre carre est TOUJOURS PRESENT dans le dessin du participant, quoi qu'il ait ete fait avec. Ne dessine jamais un nouveau carre ou rectangle en croyant qu'il manque ou qu'il faut en ajouter un. "
+    "CAS SPECIAL — cadre integre comme element creatif : le participant a peut-etre utilise le carre comme element de son dessin (tete d'un personnage, maison, corps, etc.). Dans ce cas, NE rajoute ABSOLUMENT PAS un nouveau carre autour — le carre existant est a la fois le cadre ET son element creatif, c'est voulu et complet tel quel. "
 
     "REGLE 3 — PRESERVE CHAQUE TRAIT SANS EXCEPTION : "
     "Chaque ligne, forme et trait deja present sur le papier reste exactement a sa place — meme position, meme taille, meme forme. "
@@ -243,15 +257,11 @@ PROMPT_C2_EDIT = (
     "Compare les deux images et identifie les 5 petites formes de base (demi-cercle, forme en S, 3 tirets, angle, point) et la petite forme ouverte a 3 cotes hors du cadre, qui n'ont pas ete integrees ou utilisees par le participant. Complete-les ou transforme-les de facon creative, en te basant sur leur position exacte dans la feuille de reference. Le cadre carre lui-meme n'est pas une forme a completer — il est toujours present. "
     "Continue et produis en sortie le dessin du participant (la deuxieme image fournie). "
 
-    "DESCRIPTION DU DESSIN (fournie par une IA qui l'a analyse) : {description} "
-    "Utilise cette description pour comprendre precisement ce qui est deja trace avant d'agir — ne te fie pas uniquement a ta propre interpretation des pixels. "
-
-    "PRIORITE ABSOLUE — RELIER LES ELEMENTS EXISTANTS : "
-    "Ta mission principale est de creer des liens visuels forts entre les elements deja presents dans le dessin. "
-    "Regarde ce qui est eparpille ou isole et invente ce qui manque entre ces elements pour qu'ils forment un tout coherent et lisible. "
-    "Un lien visuel n'est pas juste un trait — c'est un element qui donne du sens a la coexistence de deux formes : un corps entre une tete et des membres, une structure qui englobe plusieurs formes, une scene qui unit plusieurs objets. "
-    "Si tous les elements sont deja bien connectes, alors seulement ajoute quelque chose de nouveau — mais reste minimaliste, ajoute le moins possible, uniquement si ca apporte un vrai sens au dessin. "
-    "N'ajoute jamais d'elements sans rapport avec ce qui existe deja. "
+    "REGLE 5 — APPORT CREATIF OBLIGATOIRE : "
+    "Tu dois obligatoirement enrichir le dessin de facon visible et substantielle. "
+    "Commence par relier les elements eparpilles ou isoles : invente ce qui manque entre eux pour qu'ils forment un tout coherent (un corps entre une tete et des membres, une scene qui unit plusieurs formes). "
+    "Ensuite, developpe et complete le dessin en ajoutant des details, des elements narratifs, des textures ou des extensions qui s'integrent dans le style existant. "
+    "Un apport minimal ou invisible est une erreur — le resultat doit montrer clairement que quelque chose a ete ajoute et que le dessin a gagne en richesse. "
 
     "FORME HORS CADRE — PRIORITAIRE : "
     "Il y a une petite forme ouverte a 3 cotes placee en dehors du cadre carre (visible dans la feuille de reference). Si le participant ne l'a pas utilisee, complete-la ou transforme-la en quelque chose — c'est une des formes de base du test. "
