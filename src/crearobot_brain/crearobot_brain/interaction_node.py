@@ -2,11 +2,14 @@
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String, Bool, Int32, Float64MultiArray
+from rclpy.qos import QoSProfile, DurabilityPolicy
 import json
 import random
 import os
 
 from . import config
+
+_LATCHED = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
 
 class InteractionNode(Node):
     def __init__(self):
@@ -32,7 +35,7 @@ class InteractionNode(Node):
         self.camera_trigger_pub = self.create_publisher(String, '/pc/camera/trigger', 10)
         
         # Contrôle du STT (Activation micro)
-        self.stt_enable_pub = self.create_publisher(Bool, '/pc/stt/enable', 10)
+        self.stt_enable_pub = self.create_publisher(Bool, '/pc/stt/enable', _LATCHED)
         
         # On previent l'orchestrateur quand llm a fini son intercation (durant le feedback)
         self.loop_done_pub = self.create_publisher(String, '/pc/interaction_finished', 10)
@@ -42,7 +45,7 @@ class InteractionNode(Node):
 
         self.is_busy = False
         self.current_cmd = ""
-        self.current_tour = 1 
+        self.current_tour = 1
         self.feedback_timer = None
         self.silence_timer = None
         self.photo_timer = None
@@ -63,8 +66,9 @@ class InteractionNode(Node):
 
     def execute_phase(self, msg):
         data = json.loads(msg.data)
-        self.current_cmd = data["phase"]
+        self.current_cmd  = data["phase"]
         self.current_tour = data["tour"]
+        self._triggered_by = data.get("triggered_by", "")
         self.set_stt(False)
         self.is_busy = False
 
@@ -81,7 +85,7 @@ class InteractionNode(Node):
             self.send_robot("hi", "happy", text)
             # On ouvre le micro si besoin pour le "pret/oui"
 
-            duree = self.calculate_speech_duration(text) + 5
+            duree = self.calculate_speech_duration(text) + 0.3
             self.feedback_timer = self.create_timer(duree, self.finish_feedback_loop)
             
         elif "START_ICE_BREAKING" in self.current_cmd:  
@@ -97,7 +101,7 @@ class InteractionNode(Node):
 
         elif "START_TASK_INTRO" in self.current_cmd:
             self.move_head(0, 0)
-            text = "Enfin, assez avec mes questions, revenons à notre activité. Je vais te donner une feuille avec des petites formes dessus. Ton objectif, c'est de les utiliser pour faire un dessin. Il n'y a pas de bonne ou de mauvaise réponse. Si tu as fini avant la fin du temps, tu peux me le dire. Es-tu prêt ?"            
+            text = "Enfin, assez avec mes questions, revenons à notre activité. Je vais te donner une feuille avec des petites formes dessus. Ton objectif, c'est de les utiliser pour faire un dessin. Il n'y a pas de bonne ou de mauvaise réponse. Si tu as fini avant la fin du temps, tu peux me le dire."            
             self.send_robot("None", "None", text)
             # C'est un monologue, on envoie DONE à la fin du temps de parole
             duree = self.calculate_speech_duration(text) + 5.5
@@ -122,8 +126,8 @@ class InteractionNode(Node):
             
         elif "START_FEEDBACK" in self.current_cmd:
             self.move_head(0, 0)
-            self.dialogue_count = 0 # reset du compteur pour chaque phase de feedback
-            self.trigger_feedback()
+            self.dialogue_count = 0
+            self.trigger_feedback(skip_intro=(self._triggered_by == "addressing"))
         
         elif "START_TITLE" in self.current_cmd:
             # Le robot se penche pour admirer l'œuvre finale
@@ -142,7 +146,7 @@ class InteractionNode(Node):
             self.set_stt(False)
             self.feedback_timer = self.create_timer(1.0, self.say_goodbye_final)
 
-    def trigger_feedback(self):
+    def trigger_feedback(self, skip_intro=False):
         """ Logique des conditions C0, C1, C2 """
         text = ""
 
@@ -150,33 +154,32 @@ class InteractionNode(Node):
             if self.current_tour == 1:
                 text = random.choice(config.FEEDBACK_C0_1)
                 self.send_robot("happy", "happy", text)
-                
             elif self.current_tour == 2:
                 text = random.choice(config.FEEDBACK_C0_2)
                 self.send_robot("surprise", "surprise", text)
-            
             else:
                 return
 
-            # On calcule dynamiquement le temps de parole
             if self.feedback_timer: self.feedback_timer.cancel()
             duree = self.calculate_speech_duration(text)
             self.feedback_timer = self.create_timer(duree, self.finish_feedback_loop)
-            
-        elif config.CONDITION in ("C1", "C2"):
-            _phrases = {
-                1: ("happy",    "Oh, Faisons une pause dans le dessin que je puisse regarder. Recule un petit peu pour que la caméra puisse bien le voir."),
-                2: ("surprise", "Refaisons une pause. Je peux voir où tu en es ? Recule un petit peu pour que la caméra puisse bien voir ton dessin."),
-                3: ("happy",    "J'aimerais beaucoup voir tes dernières touches ! Est-ce que tu peux montrer ton dessin à la caméra une dernière fois pour que je puisse l'admirer ?"),
-            }
 
-            entry = _phrases.get(self.current_tour)
-            if entry:
-                emotion, text = entry
-                self.send_robot(emotion, emotion, text)
+        elif config.CONDITION in ("C1", "C2"):
+            if skip_intro:
+                wait_time = 3.5
+            else:
+                _phrases = {
+                    1: ("happy",    "Oh, Faisons une pause dans le dessin que je puisse regarder. Recule un petit peu pour que la caméra puisse bien le voir."),
+                    2: ("surprise", "Refaisons une pause. Je peux voir où tu en es ? Recule un petit peu pour que la caméra puisse bien voir ton dessin."),
+                    3: ("happy",    "J'aimerais beaucoup voir tes dernières touches ! Est-ce que tu peux montrer ton dessin à la caméra une dernière fois pour que je puisse l'admirer ?"),
+                }
+                entry = _phrases.get(self.current_tour)
+                if entry:
+                    emotion, text = entry
+                    self.send_robot(emotion, emotion, text)
+                wait_time = max(1.0, self.calculate_speech_duration(text) - 1.0)
 
             self.set_stt(False)
-            wait_time = max(1.0, self.calculate_speech_duration(text) - 1.0)
             if self.photo_timer:
                 self.photo_timer.cancel()
             self.photo_timer = self.create_timer(wait_time, self.send_camera_trigger)
@@ -244,15 +247,7 @@ class InteractionNode(Node):
             self.get_logger().info(f"Dialogue Feedback verrouillé pour : {msg.data}")
 
         elif "START_DRAWING" in self.current_cmd:
-            text = msg.data.lower()
-            if any(x in text for x in ["fini", "terminé", "pret"]):
-                self.get_logger().info(f"Fin du dessin détectée : '{msg.data}'")
-                self.is_busy = True
-                self.set_stt(False)
-                self.stop_random_animation()
-                self.loop_done_pub.publish(String(data=f"DONE:{self.current_cmd}"))
-            else:
-                self.get_logger().info(f"Audio capté (Phase {self.current_cmd}) : {msg.data}")
+            self.get_logger().info(f"Audio capté (Phase DRAWING) : {msg.data}")
 
         else:
             self.get_logger().info(f"Audio capté (Phase {self.current_cmd}) : {msg.data}")
@@ -267,8 +262,7 @@ class InteractionNode(Node):
         self.is_busy = False
 
         if "START_INTRO" in self.current_cmd:
-            self.loop_done_pub.publish(String(data=f"DONE:{self.current_cmd}"))
-            self.set_stt(True)
+            self.set_stt(True)  # attend le "oui/prêt" oral
 
         # --- LOGIQUE DE SORTIE POUR ICE_BREAKING ET FEEDBACK ---
         elif "START_ICE_BREAKING" in self.current_cmd:
@@ -335,7 +329,6 @@ class InteractionNode(Node):
     def move_head(self, yaw, pitch):
         """ Envoie une position à la tête [Yaw, Pitch] """
         msg = Float64MultiArray()
-        # HeadYaw: data[0], HeadPitch: data[1]
         msg.data = [float(yaw), float(pitch)]
         self.head_pub.publish(msg)
         self.get_logger().info(f"Mouvement tête : Yaw={yaw}, Pitch={pitch}")

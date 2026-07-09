@@ -217,11 +217,12 @@ ssh developer@192.168.100.1
 
 L'ensemble des fonctionnalités du robot sont pilotées via des appels de services ROS. Les principaux services disponibles; \textit{parole}, \textit{émotion}, \textit{geste}, \textit{volume}, \textit{audio} et \textit{behavior}. Ces fonctionnalités suivent le format général suivant :
 
+Ici bien distingué QTV1 et QTV2
 \begin{verbatim}
 rosservice call /qt_robot/speech/say "message: '<TEXTE>'"
 rosservice call /qt_robot/emotion/show "name: 'QT/<NOM_EMOTION>'"
 rosservice call /qt_robot/gesture/play "name: 'QT/<NOM_GESTE>'"
-rosservice call /qt_robot/setting/setVolume "volume: <VALEUR>"
+rosservice call /qt_robot/setting/setVolume "volume: <VALEUR>" attention ca cest pour qt v2
 rosservice call /qt_robot/audio/play "filename: 'QT/<FICHIER>'"
 rosservice call /qt_robot/behavior/talkText "message: '<TEXTE>'"
 \end{verbatim}
@@ -262,7 +263,7 @@ Par ailleurs, les versions antérieures du SDK de LuxAI ne sont plus disponibles
 %   1. vision_node capture le dessin → image base64 sur /pc/vision/image_raw_b64
 %   2. brain_node (generate_c2_feedback) : appel GPT-4o-mini avec PROMPT_C2_ANALYSIS
 %      pour décrire le dessin en langage naturel (~6 s).
-%   3. gpt-image-1 (images.edit) utilise la description + l'image originale
+%   3. gpt-image-1.5 (images.edit) utilise la description + l'image originale
 %      + le template TCT-DP pour générer une version augmentée du dessin (~20–63 s).
 %   4. L'image générée est publiée sur /pc/projector/image → projection_node l'affiche.
 %   5. brain_node envoie une phrase de transition orale au robot.
@@ -272,10 +273,14 @@ Par ailleurs, les versions antérieures du SDK de LuxAI ne sont plus disponibles
 % generate_c2_feedback fait sa propre description dédiée. process_vision reste actif
 % pour la phase TITLE (génération du titre par analyse visuelle).
 %
-% Cold start gpt-image-1 : le premier appel d'une session peut atteindre ~63 s
+% Cold start gpt-image-1.5 : le premier appel d'une session peut atteindre ~63 s
 % (allocation GPU côté OpenAI). Un appel de chauffe (image blanche 1024×1024,
 % quality="low") est lancé en thread daemon au démarrage de brain_node pour
 % absorber ce délai avant le premier vrai feedback.
+%
+% Pré-calcul du template TCT-DP : le template est chargé et converti en PNG
+% une seule fois au démarrage (C2 uniquement). Les appels successifs réutilisent
+% ce buffer sans relire le fichier.
 \subsection{Population cible et critères de scoring TCT-DP}
 % Enfants, jeunes enfants, adolescents, adultes
 % Critères : Ne, Cl, Cn, Pe, Cm, Cth, Uc\_b/d/c, Bfi/d, Hu Tableau existants
@@ -340,10 +345,20 @@ Par ailleurs, les versions antérieures du SDK de LuxAI ne sont plus disponibles
 % Décrire le TaskSynchronizer (task\_synchronizer.py) : classe asyncio qui lance parole + geste + émotion en parallèle sur le robot, avec gestion des délais pour la synchronisation de la bouche. C'est ce qui permet la synchronisation multi-actions, pas les behaviors natifs de QTRobot.
 
 \subsection{L'orchestrateur (\texttt{orchestrator\_node})}
-% Sommet de la hiérarchie — pilote la machine à états (5 phases).
-% Ne commande jamais directement le robot : publie sur un topic de contrôle.
-% Transitions hybrides : timers automatiques (durées dans config.py)
-% + thread terminal pour intervention manuelle (mots-clés "oui", "fini").
+% Sommet de la hiérarchie — pilote la machine à états (7 phases).
+% Ne commande jamais directement le robot : publie sur /pc/phase_control.
+% Sources de transition :
+%   - Timers automatiques (DRAW_DURATION = 90 s pour la phase DRAWING).
+%   - STT : détection de mots-clés "oui"/"prêt" en phase INTRO uniquement
+%     (state_machine réduit à cette seule règle — toute autre détection
+%     STT est gérée par brain_node ou le thread terminal).
+%   - on_addressing_detected : reçoit Bool sur /pc/brain/addressing_detected,
+%     déclenche FEEDBACK avec triggered_by="addressing" (prioritaire sur le timer).
+%   - on_drawing_stopped : reçoit le signal drawing_detector_node.
+%   - Thread terminal : commandes manuelles "fini", "skip", "terminate", "title"
+%     pour reprendre la main pendant une expérience.
+%   - on_interaction_done : reçoit DONE:{phase} de interaction_node à la fin
+%     de chaque phase interactive (ICE_BREAKING, TASK_INTRO, FEEDBACK, TITLE…).
 
 \subsection{Le nœud d'interaction (\texttt{interaction\_node})}
 % Reçoit les ordres de phase et les traduit en actions concrètes pour QT.
@@ -353,28 +368,59 @@ Par ailleurs, les versions antérieures du SDK de LuxAI ne sont plus disponibles
 \subsection{Le cerveau LLM (\texttt{brain\_node})}
 % Évolution directe de test\_gpt.py — nœud ROS 2.
 % LLM utilisé : GPT-4o-mini (API fournie par le tuteur de stage).
+% Modèle image : gpt-image-1.5 (images.edit), condition C2 uniquement.
 % Prompt système strict : listes fermées LISTE\_GESTES et LISTE\_EMOTIONS.
 % Sortie imposée : ["geste", "emotion", "texte"] — compatible gateway direct.
 % Historique de conversation : variables ENABLE\_HISTORY / HISTORY\_LIMIT.
 % Activé uniquement sur signal de interaction\_node (évite l'auto-écoute).
 %
+% Détection d'adressage en temps réel :
+% Pendant la phase DRAWING, chaque transcript STT est analysé par GPT-4o-mini
+% (_check_addressing, thread parallèle) pour déterminer si le participant
+% s'adresse au robot (question, demande d'aide, signal de fin).
+% Prompt strict à biais FALSE pour limiter les faux positifs (expressions
+% vagues, soupirs, monologues internes). Si adressage confirmé (TRUE) :
+%   - Réponse immédiate à l'aveugle (max 15 mots, pas de question, inclut
+%     l'instruction de reculer pour la caméra), adaptée au contenu détecté.
+%   - Publication sur /pc/brain/addressing_detected → orchestrator_node
+%     déclenche la transition DRAWING → FEEDBACK avec triggered_by="addressing".
+%   - La phrase du participant est mémorisée (_addressing_user_input) et
+%     injectée dans le prompt VLM après la prise de photo, permettant une
+%     réponse contextualisée rebondissant sur ce que le participant a dit.
+% Pattern "latest wins" : si plusieurs transcripts arrivent pendant qu'un
+% check est en cours, seul le plus récent est traité.
+% Guard de phase : si la phase change avant la fin du check, la transition
+% est ignorée (évite les transitions fantômes).
+%
 % Correctif compteur dialogue C1 (_c1_ready) :
-% Un transcript STT résiduel ("fini", prononcé en fin de phase DRAWING) peut
-% arriver dans handle_dialogue après la transition vers START_FEEDBACK, avant
-% que generate_c1_feedback() n'ait produit sa première réponse. Sans garde,
-% ce transcript est traité comme un échange valide et incrémente dialogue_count,
-% rendant le nombre d'échanges inconsistant entre les tours de feedback.
+% Un transcript STT résiduel peut arriver dans handle_dialogue après la
+% transition vers START_FEEDBACK, avant que generate_c1_feedback() n'ait
+% produit sa première réponse. Sans garde, ce transcript est traité comme
+% un échange valide et incrémente dialogue_count, rendant le nombre
+% d'échanges inconsistant entre les tours de feedback.
 % Solution : flag _c1_ready initialisé à False à chaque START_FEEDBACK,
 % passé à True uniquement à la fin de generate_c1_feedback(). handle_dialogue
 % ignore tout message reçu tant que _c1_ready est False.
 
 \subsection{La reconnaissance vocale (\texttt{stt\_node})}
 % Nœud sur le PC — micro USB externe (index pactl).
-% Moteur : Faster-Whisper (utilisé pour la Science Infuse).
-% À l'étude pour la passation de juin : éventuel passage à Vosk (offline).
-% Thread asynchrone dédié pour ne pas bloquer l'exécuteur ROS.
-% Calibration dynamique du bruit et réglage du seuil d'énergie.
-% Publie sur pc/stt/transcript — activé/désactivé par interaction\_node.
+% Moteur : Faster-Whisper. Modèle "small" sur GPU (CUDA, float16),
+% fallback automatique sur "base" CPU (int8) si CUDA indisponible.
+% Publie sur /pc/stt/transcript — activé/désactivé par interaction_node
+% via /pc/stt/enable (Bool, QoS TRANSIENT_LOCAL).
+%
+% QoS TRANSIENT_LOCAL sur /pc/stt/enable : permet à stt_node de recevoir
+% le dernier message publié même s'il démarre après interaction_node
+% (résout une race condition où enable=True était perdu au démarrage).
+%
+% Filtre d'hallucinations : Faster-Whisper peut produire sur silence ou bruit
+% des transcriptions parasites connues ("Sous-titres réalisés par la communauté
+% d'Amara.org", etc.). Un filtre _is_hallucination() compare le transcript
+% à une liste noire de patterns et l'écarte silencieusement si détecté.
+%
+% Verrouillage half-duplex : le robot n'écoute pas pendant qu'il parle.
+% /pc/robot/speaking (Bool) est publié par gateway_node ; stt_node vide
+% son buffer audio dès que speaking=True et ne reprend qu'après speaking=False.
 
 \subsection{Le module de vision}
 % Deux nœuds distincts selon le contexte :
@@ -419,6 +465,16 @@ Par ailleurs, les versions antérieures du SDK de LuxAI ne sont plus disponibles
 % Un flush de buffer (5× cap.grab() + cap.retrieve()) garantit que la frame analysée
 % est bien la plus récente et non une frame en attente dans le buffer interne d'OpenCV.
 
+\subsection{Le nœud de projection (\texttt{projection\_node})}
+% Implémenté pour la condition C2 (feedback visuel génératif via HDMI).
+% Non testé lors de la première passation (Science Infuse).
+% Reçoit les images sur /pc/projector/image (sensor_msgs/Image) et les affiche
+% en plein écran sur le projecteur via OpenCV (cv2.WINDOW_FULLSCREEN).
+% Le projecteur est détecté automatiquement via xrandr ; si absent, la fenêtre
+% s'affiche sur l'écran principal.
+% Sauvegarde chaque image reçue dans dessins_generes/ du dossier de session
+% (voir section~\ref{sec:logging}), permettant de retracer les images projetées.
+
 \subsection{Journalisation automatique des sessions expérimentales}
 \label{sec:logging}
 
@@ -462,15 +518,6 @@ Par ailleurs, les versions antérieures du SDK de LuxAI ne sont plus disponibles
 % sauvegarde chaque image reçue sur /pc/projector/image dans dessins_generes/.
 % Cela permet de retrouver après la session quelle image a été projetée à quel moment.
 
-\subsection{Le nœud de projection (\texttt{projection\_node})}
-% Implémenté pour la condition C2 (feedback visuel génératif via HDMI).
-% Non testé lors de la première passation (Science Infuse).
-% Reçoit les images sur /pc/projector/image (sensor_msgs/Image) et les affiche
-% en plein écran sur le projecteur via OpenCV (cv2.WINDOW_FULLSCREEN).
-% Le projecteur est détecté automatiquement via xrandr ; si absent, la fenêtre
-% s'affiche sur l'écran principal.
-% Sauvegarde chaque image reçue dans dessins_generes/ du dossier de session
-% (voir section~\ref{sec:logging}), permettant de retracer les images projetées.
 
 \subsection{Système de lancement (\texttt{launch.py})}
 % Lance en une commande : gateway, interaction, brain, stt, vision, drawing_detector.
@@ -495,11 +542,11 @@ Par ailleurs, les versions antérieures du SDK de LuxAI ne sont plus disponibles
 %   Type                        N    Min      Max      Moyenne
 %   GPT-4o-mini vision          3    1.59 s   4.08 s   2.82 s
 %   GPT-4o-mini description C2  2    4.76 s   7.38 s   6.07 s
-%   gpt-image-1 génération      2   20.12 s  63.94 s  42.03 s
+%   gpt-image-1.5 génération     2   20.12 s  63.94 s  42.03 s
 %   C2 total                    2   24.88 s  71.33 s  ~48 s
 %
 % Observations :
-% - La variance de gpt-image-1 est très élevée (×3 entre min et max) ;
+% - La variance de gpt-image-1.5 est très élevée (×3 entre min et max) ;
 %   le premier appel de session est systématiquement le plus lent (cold start).
 % - Après optimisation (suppression de l'appel GPT vision redondant en C2 feedback),
 %   le total descend à ~22–69 s (gain ~2.8 s par feedback).

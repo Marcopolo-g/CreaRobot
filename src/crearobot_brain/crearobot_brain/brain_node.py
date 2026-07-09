@@ -1,6 +1,6 @@
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import String
+from std_msgs.msg import String, Bool
 from rclpy.qos import QoSProfile, DurabilityPolicy
 import openai
 import json
@@ -14,6 +14,7 @@ import time
 import datetime
 import numpy as np
 import cv2
+import threading
 from sensor_msgs.msg import Image
 
 from . import config
@@ -31,18 +32,28 @@ class BrainNode(Node):
         self.chat_history  = []
         self.current_phase = ""
         self.current_tour  = 0
-        self._c1_ready     = False  # True seulement après la 1ère analyse photo du feedback
-        self._c1_robot_turn = 0    # Numéro de prise de parole du robot dans le feedback courant
+        self._c1_ready      = False  # True seulement après la 1ère analyse photo du feedback
+        self._c1_robot_turn = 0     # Numéro de prise de parole du robot dans le feedback courant
+        self._addressing_triggered  = False  # True si adressage déjà détecté ce tour
+        self._addressing_checking   = False  # True si un check LLM est en cours
+        self._addressing_pending    = None   # dernier transcript reçu pendant un check en cours
+        self._addressing_user_input = None   # phrase du participant qui a déclenché l'adressage
 
         self.create_subscription(String, '/pc/vision/image_raw_b64', self.process_vision,  10)
         self.create_subscription(String, '/pc/stt/transcript',        self.handle_dialogue, 10)
         self.create_subscription(String, '/pc/phase_control',         self.phase_callback,  10)
 
-        self.tts_pub   = self.create_publisher(String, '/pc/vision/feedback',  10)
-        self.image_pub = self.create_publisher(Image,  '/pc/projector/image',  10)
+        self.tts_pub         = self.create_publisher(String, '/pc/vision/feedback',           10)
+        self.image_pub       = self.create_publisher(Image,  '/pc/projector/image',           10)
+        self.qtaction_pub    = self.create_publisher(String, '/pc/qtaction',                  10)
+        self.addressing_pub  = self.create_publisher(Bool,   '/pc/brain/addressing_detected', 10)
 
-        self.tctdp_template_b64 = self._load_tctdp_template()
-        self.tctdp_template_png_buf = self._precompute_template_png()
+        if config.CONDITION == "C2":
+            self.tctdp_template_b64 = self._load_tctdp_template()
+            self.tctdp_template_png_buf = self._precompute_template_png()
+        else:
+            self.tctdp_template_b64 = None
+            self.tctdp_template_png_buf = None
 
         # ── Logger de session ─────────────────────────────────────────────────
         now = datetime.datetime.now()
@@ -84,6 +95,12 @@ class BrainNode(Node):
         if "START_FEEDBACK" in self.current_phase:
             self._c1_ready = False
             self._c1_robot_turn = 0
+
+        if "START_DRAWING" in self.current_phase:
+            self._addressing_triggered  = False
+            self._addressing_checking   = False
+            self._addressing_pending    = None
+            self._addressing_user_input = None
 
         if "START_ICE_BREAKING" in self.current_phase:
             if not self.chat_history:
@@ -174,6 +191,12 @@ class BrainNode(Node):
             messages = [{"role": "system", "content": config.PROMPT_C1}]
             messages.extend(self.chat_history)
             messages.append({"role": "system", "content": f"Dessin actuel : {self.visual_memory}"})
+            if self._addressing_user_input:
+                messages.append({"role": "system", "content": (
+                    f"Le participant vient de s'adresser à toi en disant : « {self._addressing_user_input} ». "
+                    "Tiens-en compte dans ta réponse (réponds à sa remarque ou question si pertinent)."
+                )})
+                self._addressing_user_input = None
             messages.append({"role": "system", "content": turn_instruction})
 
             t0 = time.time()
@@ -212,16 +235,14 @@ class BrainNode(Node):
             else:
                 images_for_edit = ("drawing.png", io.BytesIO(img_png_buf.tobytes()), "image/png")
 
-            # ── gpt-image-1 edit sans masque ─────────────────────────────────
-            # input_fidelity="high" : preserve fidelement les details de l'image d'entree
+            # ── gpt-image-1.5 edit sans masque ─────────────────────────────────
             # (formes, traits) au lieu de laisser le modele les redessiner/deformer
             image_response = self.client.images.edit(
-                model="gpt-image-1",
+                model="gpt-image-1.5",
                 image=images_for_edit,
                 prompt=edit_prompt,
                 size="auto",
                 quality="low",
-                input_fidelity="high",
             )
             self.get_logger().info(f"[LATENCE] gpt-image-1 génération : {time.time() - t0:.2f} s")
             img_bytes   = base64.b64decode(image_response.data[0].b64_json)
@@ -240,7 +261,11 @@ class BrainNode(Node):
             self.image_pub.publish(ros_img)
             self.get_logger().info("Image generee et envoyee au projecteur")
 
-            text = "Voila, j'ai essaye quelque chose a partir de ton dessin !"
+            if self._addressing_user_input:
+                text = f"J'ai entendu ce que tu m'as dit. Voilà ce que j'ai essayé à partir de ton dessin !"
+                self._addressing_user_input = None
+            else:
+                text = "Voilà, j'ai essayé quelque chose à partir de ton dessin !"
             self.chat_history.append({"role": "assistant", "content": text})
             self.send_to_robot(text)
 
@@ -249,8 +274,21 @@ class BrainNode(Node):
 
 
     def handle_dialogue(self, msg):
-        is_feedback     = "START_FEEDBACK"    in self.current_phase
+        is_feedback     = "START_FEEDBACK"     in self.current_phase
         is_ice_breaking = "START_ICE_BREAKING" in self.current_phase
+        is_drawing      = "START_DRAWING"       in self.current_phase
+
+        if is_drawing and not self._addressing_triggered:
+            if self._addressing_checking:
+                # Un check est déjà en cours — on mémorise ce transcript, il sera traité ensuite
+                self._addressing_pending = msg.data
+            else:
+                self._addressing_checking = True
+                self._addressing_pending  = None
+                threading.Thread(
+                    target=self._check_addressing, args=(msg.data,), daemon=True
+                ).start()
+            return
 
         if not is_feedback and not is_ice_breaking:
             return
@@ -388,6 +426,51 @@ class BrainNode(Node):
             self.get_logger().info(f"[WARMUP] gpt-image-1 OK ({time.time() - t0:.1f}s)")
         except Exception as e:
             self.get_logger().warning(f"[WARMUP] gpt-image-1 échoué : {e}")
+
+    def _check_addressing(self, user_input):
+        try:
+            messages = [
+                {"role": "system", "content": config.PROMPT_ADDRESSING_DETECTION},
+                {"role": "user",   "content": user_input}
+            ]
+            t0 = time.time()
+            response = self.client.chat.completions.create(
+                model="gpt-4o-mini", messages=messages, max_tokens=60,
+                response_format={"type": "json_object"}
+            )
+            self.get_logger().info(f"[LATENCE] GPT adressage : {time.time() - t0:.2f} s")
+            data    = json.loads(response.choices[0].message.content)
+            adresse = data.get("adresse_robot", False)
+            reponse = data.get("reponse", "")
+            self.get_logger().info(f"[ADRESSAGE] '{user_input}' → adresse={adresse}")
+
+            if adresse:
+                if "START_DRAWING" not in self.current_phase:
+                    self.get_logger().info("[ADRESSAGE] Phase changée entre-temps — ignoré")
+                    self._addressing_pending = None
+                    return
+                self._addressing_triggered  = True
+                self._addressing_user_input = user_input
+                if reponse:
+                    action = json.dumps(["neutral", "neutral", reponse])
+                    qt_msg = String()
+                    qt_msg.data = action
+                    self.qtaction_pub.publish(qt_msg)
+                bool_msg = Bool()
+                bool_msg.data = True
+                self.addressing_pub.publish(bool_msg)
+        except Exception as e:
+            self.get_logger().error(f"Erreur détection adressage : {e}")
+        finally:
+            pending = self._addressing_pending
+            self._addressing_pending  = None
+            self._addressing_checking = False
+            # S'il y avait un transcript en attente et qu'on n'a pas encore détecté d'adressage
+            if pending and not self._addressing_triggered:
+                self._addressing_checking = True
+                threading.Thread(
+                    target=self._check_addressing, args=(pending,), daemon=True
+                ).start()
 
     def send_to_robot(self, text):
         msg = String()

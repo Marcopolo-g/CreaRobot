@@ -14,12 +14,13 @@ class DrawingDetectorNode(Node):
     def __init__(self):
         super().__init__('drawing_detector_node')
 
-        self._active       = False
-        self._cap          = None
-        self._prev_frame   = None
-        self._still_secs   = 0.0
-        self._timer        = None
-        self._diff_history = deque(maxlen=config.FRAME_DIFF_WINDOW_SIZE)
+        self._active        = False
+        self._cap           = None
+        self._prev_frame    = None
+        self._still_secs    = 0.0
+        self._timer         = None
+        self._warmup_timer  = None
+        self._diff_history  = deque(maxlen=config.FRAME_DIFF_WINDOW_SIZE)
 
         self.pub = self.create_publisher(Bool, '/pc/vision/drawing_stopped', 10)
         self.create_subscription(String, '/pc/phase_control', self._phase_cb, 10)
@@ -54,10 +55,19 @@ class DrawingDetectorNode(Node):
         self._prev_frame = None
         self._still_secs = 0.0
         self._diff_history.clear()
+        self.get_logger().info("DrawingDetector : caméra ouverte — détection dans 20s")
+        self._warmup_timer = self.create_timer(20.0, self._start_detection)
+
+    def _start_detection(self):
+        self._warmup_timer.cancel()
+        self._warmup_timer = None
         self._timer = self.create_timer(config.FRAME_DIFF_INTERVAL, self._tick)
         self.get_logger().info("DrawingDetector activé")
 
     def _stop(self):
+        if self._warmup_timer is not None:
+            self._warmup_timer.cancel()
+            self._warmup_timer = None
         if self._timer is not None:
             self._timer.cancel()
             self._timer = None
@@ -99,14 +109,14 @@ class DrawingDetectorNode(Node):
 
         if median_px >= config.FRAME_DIFF_PIXEL_THRESHOLD:
             self._still_secs = 0.0
-            self.get_logger().info(
-                f"[DIFF] mouvement : {moved_px:>6} px  médiane={median_px:.0f} → reset"
-            )
+            #self.get_logger().info(
+            #    f"[DIFF] mouvement : {moved_px:>6} px  médiane={median_px:.0f} → reset"
+            #)
         else:
             self._still_secs += config.FRAME_DIFF_INTERVAL
-            self.get_logger().info(
-                f"[DIFF] immobile  : {moved_px:>6} px  médiane={median_px:.0f} — {self._still_secs:.1f}s/{config.FRAME_DIFF_INACTIVITY_DURATION:.1f}s"
-            )
+            #self.get_logger().info(
+            #    f"[DIFF] immobile  : {moved_px:>6} px  médiane={median_px:.0f} — {self._still_secs:.1f}s/{config.FRAME_DIFF_INACTIVITY_DURATION:.1f}s"
+            #)
             if self._still_secs >= config.FRAME_DIFF_INACTIVITY_DURATION:
                 self.get_logger().info(
                     f"DrawingDetector : fin de dessin détectée ({self._still_secs:.1f}s sans mouvement)"

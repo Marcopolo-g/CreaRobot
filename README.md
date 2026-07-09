@@ -18,7 +18,6 @@ Pour garantir une interaction fluide, tous les capteurs (micro, caméra) sont br
 | Vision | `vision_node` | Flux local via caméra USB externe |
 | Vision démo | `vision_node_temp` | Mode Science Infuse : capture d'écran HDMI (via mss) |
 | Détection dessin | `drawing_detector_node` | Détecte la fin du dessin par frame differencing + médiane glissante |
-| Détection dessin | `drawing_detector_node` | Détecte la fin du dessin par frame differencing + médiane glissante |
 | Cognition | `brain_node` | LLM/VLM : analyse texte et image, génère les réponses |
 | Projection | `projection_node` | Affiche le visuel du dessin sur le projecteur HDMI (C2) |
 | Passerelle | `gateway_node` | Bridge ROS 1 ↔ ROS 2 via WebSocket (rosbridge :9091) |
@@ -129,50 +128,13 @@ ros2 run crearobot_brain stt
 ros2 run crearobot_brain vision            # caméra USB
 ros2 run crearobot_brain vision_temp       # capture écran HDMI
 ros2 run crearobot_brain drawing_detector 
-ros2 run crearobot_brain vision            # caméra USB
-ros2 run crearobot_brain vision_temp       # capture écran HDMI
-ros2 run crearobot_brain drawing_detector 
 ```
 
 ---
 
 ## Structure de l'expérience
 
-```mermaid
-graph TD
-    INTRO[START_INTRO] -->|Timeout| ICE[START_ICE_BREAKING]
-    ICE -->|DONE| TASK[START_TASK_INTRO]
-    TASK -->|Timeout| DRAW
-    INTRO[START_INTRO] -->|Timeout| ICE[START_ICE_BREAKING]
-    ICE -->|DONE| TASK[START_TASK_INTRO]
-    TASK -->|Timeout| DRAW
-
-    subgraph Cycle["Cycle Principal - MAX_LOOPS Tours"]
-        DRAW[START_DRAWING_X 90s]
-        DRAW --> DECIDE{Dernier tour}
-        DECIDE -->|NON| FEEDBACK[START_FEEDBACK_X]
-        FEEDBACK --> INC[Tour suivant]
-    subgraph Cycle["Cycle Principal - MAX_LOOPS Tours"]
-        DRAW[START_DRAWING_X 90s]
-        DRAW --> DECIDE{Dernier tour}
-        DECIDE -->|NON| FEEDBACK[START_FEEDBACK_X]
-        FEEDBACK --> INC[Tour suivant]
-        INC --> DRAW
-    end
-
-    DECIDE -->|OUI| TITLE[START_TITLE]
-    TITLE -->|DONE| ENDING[START_ENDING]
-    DECIDE -->|OUI| TITLE[START_TITLE]
-    TITLE -->|DONE| ENDING[START_ENDING]
-
-    style INTRO fill:#f9f,stroke:#333,color:#000
-    style ICE fill:#fff4dd,stroke:#333,color:#000
-    style TASK fill:#e1f5fe,stroke:#333,color:#000
-    style DRAW fill:#bbf,stroke:#333,color:#000
-    style FEEDBACK fill:#bfb,stroke:#333,color:#000
-    style TITLE fill:#d1c4e9,stroke:#333,color:#000
-    style ENDING fill:#fbb,stroke:#333,color:#000
-```
+![Session du système CreaRobot](docs/figures/session_crearobot.png)
 
 ### Détail des phases
 
@@ -182,8 +144,7 @@ graph TD
 | Ice Breaking | `START_ICE_BREAKING` | 3 échanges amicaux pilotés par le LLM |
 | Consignes | `START_TASK_INTRO` | Explication de l'activité TCT-DP |
 | Dessin (×3) | `START_DRAWING_X` | 90s de dessin, tête inclinée vers le dessin |
-| Dessin (×3) | `START_DRAWING_X` | 90s de dessin, tête inclinée vers le dessin |
-| Feedback (×2) | `START_FEEDBACK_X` | C0 : phrase neutre / C1 : 2 échanges VLM + Chat / C2 : génération du dessin|
+| Feedback (×2) | `START_FEEDBACK_X` | C0 : 1 phrase générique positive / C1 : VLM + 2 échanges contextualisés (LLM) / C2 : VLM + génération d'image |
 | Titre | `START_TITLE` | Analyse VLM finale, génération d'un titre pour le dessin |
 | Conclusion | `START_ENDING` | Au revoir et fin de l'expérience |
 
@@ -212,26 +173,25 @@ Le `drawing_detector_node` surveille la caméra en continu pendant la phase de d
 
 La médiane est préférée à une simple valeur instantanée pour absorber les pics ponctuels (toussotement, micro-mouvement). Le timer `DRAW_DURATION` reste le mécanisme principal ; le détecteur permet de terminer plus tôt si le participant retire sa main du cadre.
 
-### Détection automatique de fin de dessin
-
-Le `drawing_detector_node` surveille la caméra en continu pendant la phase de dessin et détecte quand le participant arrête de dessiner, via **frame differencing avec médiane glissante** :
-
-- À chaque tick (toutes les `FRAME_DIFF_INTERVAL` secondes), deux frames consécutives sont comparées (`cv2.absdiff`)
-- Le nombre de pixels différents est ajouté à une fenêtre glissante de `FRAME_DIFF_WINDOW_SIZE` ticks
-- Si la **médiane** de la fenêtre est sous `FRAME_DIFF_PIXEL_THRESHOLD`, la période est considérée comme calme
-- Après `FRAME_DIFF_INACTIVITY_DURATION` secondes consécutives de calme, un `Bool(True)` est publié sur `/pc/vision/drawing_stopped`
-- L'`orchestrator_node` reçoit ce signal et déclenche immédiatement la transition de phase (comme si le timer avait expiré)
-
-La médiane est préférée à une simple valeur instantanée pour absorber les pics ponctuels (toussotement, micro-mouvement). Le timer `DRAW_DURATION` reste le mécanisme principal ; le détecteur permet de terminer plus tôt si le participant retire sa main du cadre.
 
 ### Vision & projection
 
 Le `vision_node` récupère un flux local via caméra USB (index configurable via `CAMERA_INDEX`). Le `projection_node` utilise OpenCV pour mapper une fenêtre plein écran sur la sortie HDMI du projecteur (condition C2).
-Le `vision_node` récupère un flux local via caméra USB (index configurable via `CAMERA_INDEX`). Le `projection_node` utilise OpenCV pour mapper une fenêtre plein écran sur la sortie HDMI du projecteur (condition C2).
+
+### Détection d'adressage en temps réel
+
+Pendant la phase de dessin, chaque transcription STT est analysée par un LLM (`brain_node`) pour déterminer si le participant s'adresse au robot. Le résultat est publié sur `/pc/brain/addressing_detected`.
+
+- Si **TRUE** : réponse immédiate à l'aveugle (courte phrase adaptée au contenu, avec instruction de reculer pour la caméra), puis transition vers FEEDBACK avec `triggered_by="addressing"`
+- La phrase du participant est mémorisée dans `_addressing_user_input` et injectée dans le prompt VLM après la prise de photo, pour une réponse contextualisée
+- Pattern "latest wins" : si plusieurs transcriptions arrivent pendant qu'un check LLM est en cours, seul le dernier est traité
+- Guard de phase : si la phase change entre le début du check et sa conclusion, la transition est ignorée
 
 ### Audition déportée - STT
 
-Le nœud `stt_node` embarque Faster-Whisper en local (modèle Base). Il est piloté par le topic `/pc/stt/enable` (Bool).
+Le nœud `stt_node` embarque Faster-Whisper en local (modèle `small` sur GPU, `small` sur CPU en fallback). Il est piloté par le topic `/pc/stt/enable` (Bool, QoS `TRANSIENT_LOCAL` pour éviter les race conditions au démarrage).
+
+Un filtre d'hallucinations élimine les artefacts connus de Whisper qui apparaissent comme de la pub (ex : "Sous-titres réalisés par la communauté d'Amara.org").
 
 #### Verrouillage micro (Half-Duplex)
 

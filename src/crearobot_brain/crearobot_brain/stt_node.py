@@ -1,6 +1,7 @@
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String, Bool
+from rclpy.qos import QoSProfile, DurabilityPolicy
 from faster_whisper import WhisperModel
 import numpy as np
 import sounddevice as sd
@@ -10,8 +11,9 @@ import time
 class STTNode(Node):
     def __init__(self):
         super().__init__('stt_node')
+        _latched = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
         self.pub = self.create_publisher(String, '/pc/stt/transcript', 10)
-        self.create_subscription(Bool, '/pc/stt/enable',      self.enable_callback,   10)
+        self.create_subscription(Bool, '/pc/stt/enable', self.enable_callback, _latched)
         self.create_subscription(Bool, '/pc/robot/speaking',  self.speaking_callback, 10)
 
         self.enabled         = False
@@ -20,11 +22,11 @@ class STTNode(Node):
         self._mic_open_logged = False
 
         try:
-            self.model = WhisperModel("base", device="cuda", compute_type="float16")
+            self.model = WhisperModel("small", device="cuda", compute_type="float16")
             self.get_logger().info("--- WHISPER GPU PRET ---")
         except Exception:
             self.get_logger().warning("GPU non disponible — fallback CPU")
-            self.model = WhisperModel("base", device="cpu", compute_type="int8")
+            self.model = WhisperModel("small", device="cpu", compute_type="int8")
             self.get_logger().info("--- WHISPER CPU PRET ---")
 
     @property
@@ -44,6 +46,23 @@ class STTNode(Node):
         elif self.enabled and not self._mic_open_logged:
             self._mic_open_logged = True
             self.get_logger().info("Micro ouvert — en écoute")
+
+    # Patterns d'hallucination connus de Whisper sur silence/bruit
+    _HALLUCINATIONS = [
+        "sous-titres réalisés par",
+        "amara.org",
+        "sous-titrage st'501",
+        "merci d'avoir regardé",
+        "abonnez-vous",
+        "sous-titres par",
+        "transcription by",
+        "subtitles by",
+        "translated by",
+    ]
+
+    def _is_hallucination(self, text: str) -> bool:
+        t = text.lower()
+        return any(h in t for h in self._HALLUCINATIONS)
 
     def audio_callback(self, indata, frames, time, status):
         if self._listening:
@@ -70,9 +89,13 @@ class STTNode(Node):
             duration_total  = len(recording) / 16000
             silence_at_end  = duration_total - last_end
 
-            if full_text.strip() and silence_at_end > 0.8:
-                self.get_logger().info(f"[LATENCE] Whisper transcription : {time.time() - t0:.2f} s")
+            if full_text.strip() and silence_at_end > 0.9:
                 final_text = full_text.strip()
+                if self._is_hallucination(final_text):
+                    self.get_logger().warning(f"[HALLUCINATION filtrée] {final_text}")
+                    self.audio_buffer = []
+                    return
+                self.get_logger().info(f"[LATENCE] Whisper transcription : {time.time() - t0:.2f} s")
                 self.get_logger().info(f"Phrase detectee : {final_text}")
                 msg = String()
                 msg.data = final_text

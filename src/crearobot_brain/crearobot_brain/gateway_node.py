@@ -78,7 +78,7 @@ class GatewayNode(Node):
                 if not no_emotion:
                     tasks.append((0, lambda: self.emotion_srv.call(roslibpy.ServiceRequest({'name': 'QT/' + emotion}))))
                 if not no_geste:
-                    tasks.append((0, lambda: self.gesture_srv.call(roslibpy.ServiceRequest({'name': 'QT/' + geste, 'speed': 0}))))
+                    tasks.append((0, lambda: self.gesture_srv.call(roslibpy.ServiceRequest({'name': 'QT/' + geste, 'speed': 1.0}))))
                 if tasks:
                     self.get_logger().info("Animation seule")
                     self.ts.sync(tasks)
@@ -90,7 +90,7 @@ class GatewayNode(Node):
             tasks = [
                 (0, lambda: self._talk_and_notify(texte)),
                 (0, lambda: self.emotion_srv.call(roslibpy.ServiceRequest({'name': 'QT/' + emotion}))),
-                (0, lambda: self.gesture_srv.call(roslibpy.ServiceRequest({'name': 'QT/' + geste, 'speed': 0})))
+                (0, lambda: self.gesture_srv.call(roslibpy.ServiceRequest({'name': 'QT/' + geste, 'speed': 1.0})))
             ]
             self.ts.sync(tasks)
 

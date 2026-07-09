@@ -22,7 +22,8 @@ class OrchestratorNode(Node):
 
         self.interaction_finished_sub = self.create_subscription(String, '/pc/interaction_finished', self.on_interaction_done, 10)
         self.speech_sub = self.create_subscription(String, '/pc/stt/transcript', self.state_machine, 10)
-        self.create_subscription(Bool, '/pc/vision/drawing_stopped', self.on_drawing_stopped, 10)
+        self.create_subscription(Bool, '/pc/vision/drawing_stopped',    self.on_drawing_stopped,    10)
+        self.create_subscription(Bool, '/pc/brain/addressing_detected', self.on_addressing_detected, 10)
 
         self.phase_timer = None
         self.init_timer = self.create_timer(2.0, self.start_experience)
@@ -36,13 +37,16 @@ class OrchestratorNode(Node):
             if not user_input:
                 break
             if user_input == "fini":
-                msg = String()
-                msg.data = "fini"
-                self.state_machine(msg)
-            if user_input == "terminate":
-                msg = String()
-                msg.data = "terminate"
-                self.state_machine(msg)
+                self.stop_timer()
+                self.get_logger().warn("FINI terminal : passage en FEEDBACK/TITLE")
+                if self.current_loop >= config.MAX_LOOPS:
+                    self.change_state("TITLE")
+                else:
+                    self.change_state("FEEDBACK")
+            elif user_input == "terminate":
+                self.stop_timer()
+                self.get_logger().warn("TERMINATE terminal : passage en TITLE")
+                self.change_state("TITLE")
             if user_input == "skip":
                 self.stop_timer()
                 if self.current_loop >= config.MAX_LOOPS:
@@ -70,30 +74,22 @@ class OrchestratorNode(Node):
     def state_machine(self, msg):
         text = msg.data.lower()
 
-        if self.state == "INTRO" and any(x in text for x in ["oui", "pret"]):
+        if self.state == "INTRO" and any(x in text for x in ["oui", "pret", "bon"]):
             self.change_state("ICE_BREAKING")
 
-        elif self.state == "DRAWING" and any(x in text for x in ["fini", "terminé", "pret", "terminate"]):
-            self.stop_timer()
-            if any(x in text for x in ["fini", "terminé", "pret"]):
-                if self.current_loop >= config.MAX_LOOPS:
-                    self.change_state("TITLE")
-                else:
-                    self.change_state("FEEDBACK")
-            elif "terminate" in text:
-                self.change_state("TITLE")
-
-    def change_state(self, new_state):
+    def change_state(self, new_state, triggered_by=""):
         self.state = new_state
 
         payload = {
             "phase": f"START_{new_state}",
-            "tour": self.current_loop
+            "tour": self.current_loop,
         }
-        
+        if triggered_by:
+            payload["triggered_by"] = triggered_by
+
         if self.state == "DRAWING":
             self.start_draw_timer()
-            
+
         msg = String()
         msg.data = json.dumps(payload)
         self.phase_ctrl_pub.publish(msg)
@@ -111,6 +107,15 @@ class OrchestratorNode(Node):
         if msg.data and self.state == "DRAWING":
             self.get_logger().info("DrawingDetector : fin de dessin détectée — transition de phase")
             self.on_draw_timeout()
+
+    def on_addressing_detected(self, msg):
+        if msg.data and self.state == "DRAWING":
+            self.get_logger().info("Adressage détecté — transition vers feedback")
+            self.stop_timer()
+            if self.current_loop >= config.MAX_LOOPS:
+                self.change_state("TITLE")
+            else:
+                self.change_state("FEEDBACK", triggered_by="addressing")
 
     def on_draw_timeout(self):
         self.stop_timer()
@@ -131,10 +136,7 @@ class OrchestratorNode(Node):
         if status != "DONE":
             return
 
-        if self.state == "INTRO" and "INTRO" in phase:
-            self.change_state("ICE_BREAKING")
-
-        elif self.state == "ICE_BREAKING" and "ICE_BREAKING" in phase:
+        if self.state == "ICE_BREAKING" and "ICE_BREAKING" in phase:
             self.change_state("TASK_INTRO")
 
         elif self.state == "TASK_INTRO" and "TASK_INTRO" in phase:
