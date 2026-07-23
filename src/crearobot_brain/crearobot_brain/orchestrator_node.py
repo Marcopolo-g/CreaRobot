@@ -40,25 +40,25 @@ class OrchestratorNode(Node):
                 self.stop_timer()
                 self.get_logger().warn("FINI terminal : passage en FEEDBACK/TITLE")
                 if self.current_loop >= config.MAX_LOOPS:
-                    self.change_state("TITLE")
+                    self.change_state("TITLE", triggered_by="terminal:fini")
                 else:
-                    self.change_state("FEEDBACK")
+                    self.change_state("FEEDBACK", triggered_by="terminal:fini")
             elif user_input == "terminate":
                 self.stop_timer()
                 self.get_logger().warn("TERMINATE terminal : passage en TITLE")
-                self.change_state("TITLE")
+                self.change_state("TITLE", triggered_by="terminal:terminate")
             if user_input == "skip":
                 self.stop_timer()
                 if self.current_loop >= config.MAX_LOOPS:
                     self.get_logger().warn(f"SKIP : passage direct en TITLE depuis {self.state}")
-                    self.change_state("TITLE")
+                    self.change_state("TITLE", triggered_by="terminal:skip")
                 else:
                     self.get_logger().warn(f"SKIP : passage direct en FEEDBACK depuis {self.state}")
-                    self.change_state("FEEDBACK")
+                    self.change_state("FEEDBACK", triggered_by="terminal:skip")
             elif user_input == "title":
                 self.stop_timer()
                 self.get_logger().warn("TITLE forcé depuis le terminal")
-                self.change_state("TITLE")
+                self.change_state("TITLE", triggered_by="terminal:title")
 
     def start_experience(self):
         if self.init_timer:
@@ -106,26 +106,27 @@ class OrchestratorNode(Node):
     def on_drawing_stopped(self, msg):
         if msg.data and self.state == "DRAWING":
             self.get_logger().info("DrawingDetector : fin de dessin détectée — transition de phase")
-            self.on_draw_timeout()
+            self.stop_timer()
+            if self.current_loop >= config.MAX_LOOPS:
+                self.change_state("TITLE", triggered_by="frame_diff")
+            else:
+                self.change_state("FEEDBACK", triggered_by="frame_diff")
 
     def on_addressing_detected(self, msg):
         if msg.data and self.state == "DRAWING":
             self.get_logger().info("Adressage détecté — transition vers feedback")
             self.stop_timer()
             if self.current_loop >= config.MAX_LOOPS:
-                self.change_state("TITLE")
+                self.change_state("TITLE", triggered_by="addressing")
             else:
                 self.change_state("FEEDBACK", triggered_by="addressing")
 
     def on_draw_timeout(self):
         self.stop_timer()
-
-        # SI on est au dernier tour, on ne fait pas de feedback, on finit !
         if self.current_loop >= config.MAX_LOOPS:
-            self.change_state("TITLE")
+            self.change_state("TITLE", triggered_by="timeout")
         else:
-            # Sinon on passe au feedback normalement
-            self.change_state("FEEDBACK")
+            self.change_state("FEEDBACK", triggered_by="timeout")
 
     def on_interaction_done(self, msg):
         """ QT a fini son feedback : on lance toujours le tour suivant """

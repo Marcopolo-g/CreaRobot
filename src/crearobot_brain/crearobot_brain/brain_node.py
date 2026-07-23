@@ -59,9 +59,8 @@ class BrainNode(Node):
         now = datetime.datetime.now()
         day_str  = now.strftime("%Y-%m-%d")
         time_str = now.strftime("%H-%M-%S")
-        self.session_dir = os.path.join(
-            config.SESSIONS_DIR, day_str, time_str
-        )
+        self.session_dir = os.path.join(config.SESSIONS_DIR, day_str, time_str)
+
         os.makedirs(self.session_dir, exist_ok=True)
         log_path = os.path.join(self.session_dir, "conversation.log")
         self._log_file = open(log_path, "w", encoding="utf-8")
@@ -91,6 +90,8 @@ class BrainNode(Node):
         data = json.loads(msg.data)
         self.current_phase = data["phase"]
         self.current_tour  = data["tour"]
+        triggered_by = data.get("triggered_by", "")
+        self._log_phase(self.current_phase, self.current_tour, triggered_by)
 
         if "START_FEEDBACK" in self.current_phase:
             self._c1_ready = False
@@ -235,7 +236,7 @@ class BrainNode(Node):
             else:
                 images_for_edit = ("drawing.png", io.BytesIO(img_png_buf.tobytes()), "image/png")
 
-            # ── gpt-image-1.5 edit sans masque ─────────────────────────────────
+            # ── gpt-image-1.5 ─────────────────────────────────
             # (formes, traits) au lieu de laisser le modele les redessiner/deformer
             image_response = self.client.images.edit(
                 model="gpt-image-1.5",
@@ -244,7 +245,7 @@ class BrainNode(Node):
                 size="auto",
                 quality="low",
             )
-            self.get_logger().info(f"[LATENCE] gpt-image-1 génération : {time.time() - t0:.2f} s")
+            self.get_logger().info(f"[LATENCE] gpt-image-1.5 génération : {time.time() - t0:.2f} s")
             img_bytes   = base64.b64decode(image_response.data[0].b64_json)
             img_out_arr = np.frombuffer(img_bytes, dtype=np.uint8)
             img_decoded = cv2.imdecode(img_out_arr, cv2.IMREAD_COLOR)
@@ -373,8 +374,23 @@ class BrainNode(Node):
     def _ts(self):
         return datetime.datetime.now().strftime("%H:%M:%S")
 
+    def _log_phase(self, phase, tour, triggered_by=""):
+        _TRIGGERS = {
+            "addressing":      "ADRESSAGE",
+            "frame_diff":      "FRAME DIFFERENCING",
+            "timeout":         "TIMEOUT",
+            "terminal:fini":   "TERMINAL (fini)",
+            "terminal:skip":   "TERMINAL (skip)",
+            "terminal:terminate": "TERMINAL (terminate)",
+            "terminal:title":  "TERMINAL (title)",
+        }
+        reason = f" ← {_TRIGGERS.get(triggered_by, triggered_by)}" if triggered_by else ""
+        line = f"[{self._ts()}]\tPHASE       : {phase}  Tour {tour}{reason}\n"
+        self._log_file.write(line)
+        self._log_file.flush()
+
     def _log_participant(self, msg):
-        line = f"[{self._ts()}] PARTICIPANT : {msg.data}\n"
+        line = f"[{self._ts()}]\tPARTICIPANT : {msg.data}\n"
         self._log_file.write(line)
         self._log_file.flush()
 
@@ -385,7 +401,7 @@ class BrainNode(Node):
         except Exception:
             text = msg.data
         if text and text.strip():
-            line = f"[{self._ts()}] ROBOT       : {text}\n"
+            line = f"[{self._ts()}]\tROBOT       : {text}\n"
             self._log_file.write(line)
             self._log_file.flush()
 
@@ -417,15 +433,15 @@ class BrainNode(Node):
             if self.tctdp_template_png_buf is not None:
                 images.insert(0, ("template.png", io.BytesIO(self.tctdp_template_png_buf.tobytes()), "image/png"))
             self.client.images.edit(
-                model="gpt-image-1",
+                model="gpt-image-1.5",
                 image=images,
                 prompt=".",
                 size="1024x1024",
                 quality="low",
             )
-            self.get_logger().info(f"[WARMUP] gpt-image-1 OK ({time.time() - t0:.1f}s)")
+            self.get_logger().info(f"[WARMUP] gpt-image-1.5 OK ({time.time() - t0:.1f}s)")
         except Exception as e:
-            self.get_logger().warning(f"[WARMUP] gpt-image-1 échoué : {e}")
+            self.get_logger().warning(f"[WARMUP] gpt-image-1.5 échoué : {e}")
 
     def _check_addressing(self, user_input):
         try:

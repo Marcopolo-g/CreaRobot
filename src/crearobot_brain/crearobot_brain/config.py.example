@@ -1,16 +1,19 @@
 # config.py
 import os
 
-# Dossier de sessions — dans crearobot_sessions/ à la racine du repo
-SESSIONS_DIR = os.path.abspath(
-    os.path.join(os.path.dirname(os.path.realpath(__file__)), '..', '..', '..', 'crearobot_sessions')
+# Dossier de sessions : dans crearobot_sessions/ à la racine du repo.
+_colcon_prefix = os.environ.get('COLCON_PREFIX_PATH', '').split(':')[0]
+SESSIONS_DIR = os.path.join(
+    os.path.dirname(_colcon_prefix) if _colcon_prefix
+    else os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', '..')),
+    'crearobot_sessions'
 )
 
 # --- Configuration API ---
 OPENAI_API_KEY = "YOUR_API_KEY_HERE"
 
 # --- Paramètres de la voix du robot ---
-VOICE_VOLUME = 10
+VOICE_VOLUME = 75
 VOICE_PITCH = 0
 VOICE_SPEED = 0
 VOICE_LANG = "fr-FR"
@@ -81,9 +84,10 @@ CONDITION = "C1"
 
 # --- Détection fin de dessin (frame differencing + médiane) ---
 FRAME_DIFF_INTERVAL            = 1.0   # secondes entre deux captures
-FRAME_DIFF_PIXEL_THRESHOLD     = 10000  # médiane des pixels différents sur la fenêtre = mouvement significatif
+FRAME_DIFF_PIXEL_THRESHOLD     = 1000  # médiane des pixels différents sur la fenêtre = mouvement significatif
 FRAME_DIFF_INACTIVITY_DURATION = 12.0   # secondes sans mouvement → fin de dessin
 FRAME_DIFF_WINDOW_SIZE         = 6     # taille de la fenêtre glissante pour la médiane
+FRAME_DIFF_WARMUP              = 20    # temps avant l'activation du frame differencing
 
 # Mode debug : True pour démarrer directement à la phase DRAWING (skip INTRO/ICE_BREAKING/TASK_INTRO)
 # Taper "skip" dans le terminal de l'orchestrator passe immédiatement en FEEDBACK (skip le timer de dessin)
@@ -270,4 +274,25 @@ PROMPT_C2_EDIT = (
     "Dessine au moins un nouvel element dans l'espace blanc en dehors du cadre carre. Ce n'est pas optionnel. "
 
     "Ceci est une bifurcation, pas une correction."
+)
+
+# ---------------------- DÉTECTION D'ADRESSAGE (PHASE DESSIN) --------------------
+
+PROMPT_ADDRESSING_DETECTION = (
+    "Un enfant dessine, seul avec toi (le robot). Il vient de dire quelque chose à voix haute. "
+    "Ton rôle : déterminer si cette phrase mérite une réaction de ta part. "
+    "Réponds TRUE uniquement si la phrase s'adresse clairement à toi ou appelle une réaction : "
+    "question directe, demande d'aide explicite, ou signal clair de fin de dessin "
+    "(ex : 'j'ai fini', 'je crois que j'ai fini', 'tu en penses quoi ?', 'je sais pas quoi rajouter', 'c'est bon pour moi'). "
+    "Réponds FALSE pour toute expression vague, soupir, confirmation sociale ou monologue interne "
+    "(ex : 'bah je sais pas', 'hm', 'c'est ça ?', 'ouais', 'merci c'est bon', 'ok ok', "
+    "narration du dessin, bruits, chantonnement, phrases courtes sans destinataire clair). "
+    "En cas de doute, préfère FALSE. "
+    "Si TRUE, génère une courte phrase (max 15 mots, PAS de question) qui reconnaît ce qu'il a dit "
+    "et lui demande de reculer pour que la caméra puisse voir le dessin. "
+    "Adapte le ton à ce qu'il a dit : si hésitation → rassure-le d'abord ; si 'j'ai fini' → acquiesce. "
+    "Exemples : 'Pas de problème ! Recule un peu pour que je voie ton dessin.', "
+    "'Bien sûr, recule un petit peu pour que je puisse regarder !', "
+    "'Ne t'inquiète pas ! Montre-moi ton dessin, recule un peu.'. "
+    "Réponds en JSON : {\"adresse_robot\": true/false, \"reponse\": \"...\" (uniquement si adresse_robot=true)}"
 )

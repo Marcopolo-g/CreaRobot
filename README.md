@@ -6,7 +6,7 @@
 
 ## Architecture du système
 
-Pour garantir une interaction fluide, tous les capteurs (micro, caméra) sont branchés directement sur le PC. La Gateway ne sert plus qu'à envoyer les commandes motrices et vocales au robot.
+Pour garantir une interaction fluide, les capteurs sont côté PC et indépendants du robot : micro intégré du PC et caméra USB externe. La Gateway ne sert plus qu'à envoyer les commandes motrices et vocales au robot.
 
 ![Architecture du système CreaRobot](docs/figures/Architecture_système_CreaRobot.png)
 
@@ -82,7 +82,7 @@ export LD_LIBRARY_PATH=$HOME/.local/lib/python3.10/site-packages/nvidia/cublas/l
 
 #### Configuration du Micro
 
-Pour que le stt_node fonctionne de manière optimisé, votre microphone USB doit être défini comme périphérique par défaut.
+Pour que le stt_node fonctionne de manière optimisée, le microphone du PC doit être défini comme périphérique par défaut.
 
 Listez vos sources : `pactl list short sources`
 
@@ -218,7 +218,7 @@ Pour éviter que QT ne s'écoute parler :
 crearobot_sessions/
   2026-06-29/
     14-32-05/
-      conversation.log   ← transcriptions PARTICIPANT + textes ROBOT
+      conversation.log   ← transcriptions PARTICIPANT + textes ROBOT + transitions de phase
       dessins/           ← photos du dessin réel (vision_node)
         01_feedback_tour1_14-33-12.jpg
         02_feedback_tour2_14-41-07.jpg
@@ -232,9 +232,19 @@ crearobot_sessions/
 ```
 === Session CreaRobot — 2026-06-29 14-32-05 — Condition C1 ===
 
+[14:32:06] PHASE        START_INTRO  Tour 1
+[14:32:20] PHASE        START_ICE_BREAKING  Tour 1
+[14:33:00] PHASE        START_DRAWING  Tour 1
 [14:33:10] PARTICIPANT : j'ai fait un bonhomme avec un chapeau
+[14:33:12] PHASE        START_FEEDBACK  Tour 1  ← ADRESSAGE
 [14:33:14] ROBOT       : Oh intéressant ! Tu as pensé à lui donner une expression ?
+[14:35:00] PHASE        START_DRAWING  Tour 2
+[14:36:30] PHASE        START_FEEDBACK  Tour 2  ← TIMEOUT
+[14:38:00] PHASE        START_DRAWING  Tour 3
+[14:39:10] PHASE        START_FEEDBACK  Tour 3  ← FRAME DIFFERENCING
 ```
+
+Les lignes `PHASE` tracent chaque transition d'état. Pour les sorties de phase `DRAWING`, la cause est indiquée : `ADRESSAGE` (participant s'est adressé au robot), `TIMEOUT` (durée max atteinte), `FRAME DIFFERENCING` (inactivité détectée), ou `TERMINAL (fini/skip/…)` (commande manuelle).
 
 **`dessins/`** — photos capturées par `vision_node` à chaque déclenchement caméra, nommées `{index}_{phase}_tour{N}_{heure}.jpg`.
 
@@ -271,7 +281,7 @@ Le score total normalisé est la somme des 12 critères normalisés → **max = 
 
 `scores_tctdp.csv` - colonnes : `Participant`, `Condition` (C0/C1), `Tranche_age`, 12 critères TCT-DP, `Total`.
 
-`score_todd.csv` - note de créativité subjective attribuée par Todd Lubart (score expert).
+`score_todd.csv` - note de créativité subjective attribuée par plusieurs experts.
 
 | Tranche d'âge | C0 | C1 | Inclus |
 |---|---|---|---|

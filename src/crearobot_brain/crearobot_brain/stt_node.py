@@ -26,7 +26,7 @@ class STTNode(Node):
             self.get_logger().info("--- WHISPER GPU PRET ---")
         except Exception:
             self.get_logger().warning("GPU non disponible — fallback CPU")
-            self.model = WhisperModel("small", device="cpu", compute_type="int8")
+            self.model = WhisperModel("base", device="cpu", compute_type="int8")
             self.get_logger().info("--- WHISPER CPU PRET ---")
 
     @property

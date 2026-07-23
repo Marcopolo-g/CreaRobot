@@ -304,7 +304,7 @@ Par ailleurs, les versions antérieures du SDK de LuxAI ne sont plus disponibles
 %     sur le robot crée des conflits insolubles.
 % (3) Caméra : fixée sur la tête de QT, elle ne peut pas photographier un
 %     dessin posé sur une table sans que le participant ne le soulève.
-% Solution retenue : externaliser les capteurs sur le PC (micro cravate USB
+% Solution retenue : externaliser les capteurs sur le PC (micro intégré du PC
 % + caméra externe) et y concentrer toute l'intelligence du système.
 
 \subsection{Tentative initiale : capteurs embarqués sur le robot}
@@ -403,7 +403,7 @@ Par ailleurs, les versions antérieures du SDK de LuxAI ne sont plus disponibles
 % ignore tout message reçu tant que _c1_ready est False.
 
 \subsection{La reconnaissance vocale (\texttt{stt\_node})}
-% Nœud sur le PC — micro USB externe (index pactl).
+% Nœud sur le PC — micro intégré du PC (index pactl).
 % Moteur : Faster-Whisper. Modèle "small" sur GPU (CUDA, float16),
 % fallback automatique sur "base" CPU (int8) si CUDA indisponible.
 % Publie sur /pc/stt/transcript — activé/désactivé par interaction_node
@@ -506,9 +506,28 @@ Par ailleurs, les versions antérieures du SDK de LuxAI ne sont plus disponibles
 %         ...
 
 % Contenu de conversation.log :
-% Chaque ligne est horodatée et préfixée PARTICIPANT ou ROBOT.
-% brain_node est abonné à /pc/stt/transcript (STT → transcription)
-% et à /pc/qtaction (commandes robot → extraction du champ texte du JSON).
+% Chaque ligne est horodatée (HH:MM:SS) et préfixée par un mot-clé :
+%   PARTICIPANT : transcription STT du participant
+%   ROBOT       : texte prononcé par le robot (extrait du JSON qtaction)
+%   PHASE       : transition d'état publiée par orchestrator_node
+%
+% Les lignes PHASE incluent le nom de la phase, le numéro de tour, et pour les
+% sorties de phase DRAWING, la cause de transition :
+%   ← ADRESSAGE          : le participant s'est adressé au robot (détection LLM)
+%   ← TIMEOUT            : la durée maximale DRAW_DURATION a été atteinte
+%   ← FRAME DIFFERENCING : inactivité détectée par drawing_detector_node
+%   ← TERMINAL (fini/skip/…) : commande manuelle saisie dans le terminal
+%
+% Exemple de log :
+%   [14:33:00] PHASE        START_DRAWING  Tour 1
+%   [14:33:10] PARTICIPANT : j'ai fait un bonhomme avec un chapeau
+%   [14:33:12] PHASE        START_FEEDBACK  Tour 1  ← ADRESSAGE
+%   [14:33:14] ROBOT       : Oh intéressant !
+%   [14:35:00] PHASE        START_DRAWING  Tour 2
+%   [14:36:30] PHASE        START_FEEDBACK  Tour 2  ← TIMEOUT
+%
+% brain_node s'abonne à /pc/phase_control pour loguer les transitions,
+% à /pc/stt/transcript pour les transcriptions, et à /pc/qtaction pour les textes robot.
 
 % Nommage des photos :
 % {index:02d}_{phase}_tour{N}_{HH-MM-SS}.jpg

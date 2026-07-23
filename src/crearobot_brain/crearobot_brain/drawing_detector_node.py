@@ -56,7 +56,7 @@ class DrawingDetectorNode(Node):
         self._still_secs = 0.0
         self._diff_history.clear()
         self.get_logger().info("DrawingDetector : caméra ouverte — détection dans 20s")
-        self._warmup_timer = self.create_timer(20.0, self._start_detection)
+        self._warmup_timer = self.create_timer(config.FRAME_DIFF_WARMUP, self._start_detection)
 
     def _start_detection(self):
         self._warmup_timer.cancel()
