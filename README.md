@@ -78,7 +78,7 @@ sudo apt install ros-humble-cv-bridge
 Le nœud STT tente de charger Whisper sur GPU (CUDA) au démarrage, avec fallback automatique sur CPU si indisponible. Vérifier que les drivers NVIDIA sont installés (`nvidia-smi`), puis ajouter dans `~/.bashrc` :
 
 ```bash
-export LD_LIBRARY_PATH=$HOME/.local/lib/python3.10/site-packages/nvidia/cublas/lib:$HOME/.local/lib/python3.10/site-packages/nvidia/cudnn/lib:$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH=$HOME/.local/lib/python3.10/site-packages/nvidia/cublas/lib:$HOME/.local/lib/python3.10/site-packages/nvietdia/cudnn/lib:$LD_LIBRARY_PATH
 ```
 
 #### Configuration du Micro
@@ -102,6 +102,11 @@ Activer dans l'autostart ros_bridge et motor :
 - *start_qt_motor.sh*
 
 ### 2. Côté PC - ROS 2
+
+```bash
+colcon build
+source install/setup.bash
+```
 
 #### Méthode principale (recommandée)
 
@@ -144,7 +149,7 @@ ros2 run crearobot_brain drawing_detector
 | Introduction | `START_INTRO` | Accueil du participant, présentation du robot |
 | Ice Breaking | `START_ICE_BREAKING` | 3 échanges amicaux pilotés par le LLM |
 | Consignes | `START_TASK_INTRO` | Explication de l'activité TCT-DP |
-| Dessin (×3) | `START_DRAWING_X` | 90s de dessin, tête inclinée vers le dessin |
+| Dessin (×3) | `START_DRAWING_X` | 90s de dessin, angle de tête configurable (`HEAD_PITCH_DRAWING`) |
 | Feedback (×2) | `START_FEEDBACK_X` | C0 : 1 phrase générique positive / C1 : VLM + 2 échanges contextualisés (LLM) / C2 : VLM + génération d'image |
 | Titre | `START_TITLE` | Analyse VLM finale, génération d'un titre pour le dessin |
 | Conclusion | `START_ENDING` | Au revoir et fin de l'expérience |
@@ -208,7 +213,7 @@ Pour éviter que QT ne s'écoute parler :
 
 ### Mouvements de tête dynamiques
 
-- **Phase Dessin** : tête inclinée vers le bas (HeadPitch = 20) - attention conjointe sur la feuille
+- **Phase Dessin** : angle de tête configurable via `HEAD_PITCH_DRAWING` dans `config.py` (par défaut 0, tête droite)
 - **Phase Feedback / Ice Breaking** : tête droite (HeadPitch = 0) - contact visuel avec le participant
 
 ### Journalisation automatique des sessions

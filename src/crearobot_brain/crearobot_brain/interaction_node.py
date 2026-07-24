@@ -108,7 +108,7 @@ class InteractionNode(Node):
             self.feedback_timer = self.create_timer(duree, self.finish_feedback_loop)
 
         elif "START_DRAWING" in self.current_cmd:
-            self.move_head(0, 20)
+            self.move_head(0, config.HEAD_PITCH_DRAWING)
 
             # ----------- A MODIFIER -------------------------------------------------
             if self.current_tour == 1:
@@ -331,7 +331,6 @@ class InteractionNode(Node):
         msg = Float64MultiArray()
         msg.data = [float(yaw), float(pitch)]
         self.head_pub.publish(msg)
-        self.get_logger().info(f"Mouvement tête : Yaw={yaw}, Pitch={pitch}")
 
     def stop_silence_timer(self):
         """ Arrête proprement le timer de relance """
@@ -376,8 +375,7 @@ class InteractionNode(Node):
                 
                 # Action de retour au dessin
                 if "START_DRAWING" in self.current_cmd and not self.is_busy:
-                    self.move_head(0, 20)
-                    self.get_logger().info("Tête de retour sur le dessin.")
+                    self.move_head(0, config.HEAD_PITCH_DRAWING)
 
             # On stocke le timer pour pouvoir le détruire proprement
             self.reset_timer = self.create_timer(4.0, reset_head_cb)

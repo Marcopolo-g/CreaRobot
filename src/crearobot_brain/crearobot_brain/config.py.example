@@ -69,6 +69,10 @@ LISTE_EMOTIONS = [
 # --- Caméra ---
 CAMERA_INDEX = 2
 
+# --- Position de la tête de QT pendant la phase de dessin ---
+# Angle d'inclinaison de la tête envoyé à move_head(yaw, pitch) durant DRAWING.
+HEAD_PITCH_DRAWING = 0
+
 # Parametres generales de l'exp
 MAX_LOOPS = 3 # Nombre de fois qu'on dessine
 DRAW_DURATION = 90.0 # 1 minutes 30 (90s)
