@@ -10,6 +10,8 @@ import subprocess
 import os
 import datetime
 
+from . import config
+
 class ProjectionNode(Node):
     def __init__(self):
         super().__init__('projection_node')
@@ -21,6 +23,7 @@ class ProjectionNode(Node):
         self.current_image = None
         self._generated_dir = None
         self._image_index = 0
+        self.clear_timer = None
 
         # --- DÉPLOIEMENT FENÊTRE ---
         cv2.namedWindow(self.window_name, cv2.WINDOW_NORMAL)
@@ -68,14 +71,26 @@ class ProjectionNode(Node):
                 fname = f"{self._image_index:02d}_genere_{ts}.jpg"
                 cv2.imwrite(os.path.join(self._generated_dir, fname), self.current_image)
                 self.get_logger().info(f"Dessin généré sauvegardé : {fname}")
+
+            # Efface la projection après PROJECTION_DISPLAY_DURATION s, indépendamment
+            # de la transition de phase (gérée par ailleurs via son propre timeout).
+            if self.clear_timer:
+                self.clear_timer.cancel()
+            self.clear_timer = self.create_timer(config.PROJECTION_DISPLAY_DURATION, self._clear_projection)
         except Exception as e:
             self.get_logger().error(f"Erreur décodage : {e}")
+
+    def _clear_projection(self):
+        if self.clear_timer:
+            self.clear_timer.cancel()
+            self.clear_timer = None
+        self.current_image = None
 
     def update_gui(self):
         if self.current_image is not None:
             cv2.imshow(self.window_name, self.current_image)
         else:
-            cv2.imshow(self.window_name, np.zeros((1080, 1920, 3), dtype=np.uint8))
+            cv2.imshow(self.window_name, np.full((1080, 1920, 3), 255, dtype=np.uint8))
         cv2.waitKey(1)
 
 def main(args=None):

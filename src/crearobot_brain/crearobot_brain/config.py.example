@@ -69,6 +69,12 @@ LISTE_EMOTIONS = [
 # --- Caméra ---
 CAMERA_INDEX = 2
 
+# Choix de la condition : "C0", "C1" ou "C2"
+CONDITION = "C1"
+
+# Choix de la version du test : "A" ou "B" selon le sens d'impression de la feuille TCT-DP (pour C2)
+TEST_SHEET_VERSION = "A"  
+
 # --- Position de la tête de QT pendant la phase de dessin ---
 # Angle d'inclinaison de la tête envoyé à move_head(yaw, pitch) durant DRAWING.
 HEAD_PITCH_DRAWING = 0
@@ -83,9 +89,6 @@ DIALOGUE_DURATION = 3 # 3 nombre d'échanges durant l'ice breaking (nombre de pa
 ENABLE_HISTORY = True # True pour activer, False pour désactiver l'historique
 HISTORY_LIMIT = 3 # Nombre de derniers échanges à retenir
 
-# Choix de la condition : "C0", "C1" ou "C2"
-CONDITION = "C1"
-
 # --- Détection fin de dessin (frame differencing + médiane) ---
 FRAME_DIFF_INTERVAL            = 1.0   # secondes entre deux captures
 FRAME_DIFF_PIXEL_THRESHOLD     = 1000  # médiane des pixels différents sur la fenêtre = mouvement significatif
@@ -93,12 +96,13 @@ FRAME_DIFF_INACTIVITY_DURATION = 12.0   # secondes sans mouvement → fin de des
 FRAME_DIFF_WINDOW_SIZE         = 6     # taille de la fenêtre glissante pour la médiane
 FRAME_DIFF_WARMUP              = 20    # temps avant l'activation du frame differencing
 
+# Durée (en secondes) pendant laquelle l'image projetée reste affichée avant de s'effacer (pour C2).
+PROJECTION_DISPLAY_DURATION = 15.0
+
 # Mode debug : True pour démarrer directement à la phase DRAWING (skip INTRO/ICE_BREAKING/TASK_INTRO)
 # Taper "skip" dans le terminal de l'orchestrator passe immédiatement en FEEDBACK (skip le timer de dessin)
-DEBUG_SKIP_TO_FEEDBACK = True
+DEBUG_SKIP_TO_FEEDBACK = False
 
-# Choix de la version du test : "A" ou "B" selon le sens d'impression de la feuille TCT-DP (pour C2)
-TEST_SHEET_VERSION = "A"  
 
 # Feedback pour condition controle
 FEEDBACK_C0_1 = [
