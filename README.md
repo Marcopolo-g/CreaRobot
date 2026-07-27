@@ -69,7 +69,7 @@ Adresse IP de QTRP sur le réseau :
 #### Dépendances
 
 ```bash
-pip install roslibpy openai opencv-python numpy faster-whisper sounddevice mss nvidia-cublas-cu12 nvidia-cudnn-cu12
+pip install roslibpy openai opencv-python "numpy==1.26.4" faster-whisper sounddevice mss nvidia-cublas-cu12 nvidia-cudnn-cu12
 sudo apt install ros-humble-cv-bridge
 ```
 
