@@ -307,7 +307,7 @@ class BrainNode(Node):
             messages.append({"role": "system", "content": f"Memoire visuelle : {self.visual_memory}"})
             messages.append({"role": "system", "content": turn_instruction})
 
-        messages.extend(self.chat_history[-6:])
+        messages.extend(self.chat_history[-(config.HISTORY_LIMIT * 2):])
         messages.append({"role": "user", "content": user_input})
 
         try:

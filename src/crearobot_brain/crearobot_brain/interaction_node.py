@@ -27,7 +27,11 @@ class InteractionNode(Node):
         
         # Écoute du transcript pour verrouiller l'interaction
         self.stt_sub = self.create_subscription(String, '/pc/stt/transcript', self.stt_callback, 10)
-        
+
+        # Écoute le signal réel de parole du robot (publié par gateway_node),
+        # utilisé pour enchaîner les actions au bon moment plutôt que d'estimer une durée
+        self.speaking_sub = self.create_subscription(Bool, '/pc/robot/speaking', self.on_robot_speaking, 10)
+
         # Parle à la Gateway (pour les gestes et la voix directe)
         self.action_pub = self.create_publisher(String, '/pc/qtaction', 10)
 
@@ -52,6 +56,10 @@ class InteractionNode(Node):
         self.animation_timer = None
         self.dialogue_count = 0
 
+        # État pour l'attente de fin de parole réelle du robot
+        self._robot_is_speaking = False
+        self._awaiting_speech_start = False
+        self._pending_speech_state = None
 
     def set_stt(self, state):
         msg = Bool()
@@ -64,6 +72,62 @@ class InteractionNode(Node):
         else:
             self.stop_silence_timer()
 
+    def _cancel_pending_speech_action(self):
+        """ Invalide toute attente de fin de parole en cours (ex. changement de phase) """
+        state = self._pending_speech_state
+        if state is not None:
+            state['resolved'] = True
+            if state.get('delay_timer'):
+                state['delay_timer'].cancel()
+        self._pending_speech_state = None
+
+    def _after_speech(self, callback, extra_delay=0.0, timer_attr='feedback_timer'):
+        """
+        Programme callback pour qu'il s'exécute une fois que le robot a réellement fini de
+        parler (transition True -> False de /pc/robot/speaking, publié par gateway_node),
+        plus extra_delay secondes.
+        """
+        self._cancel_pending_speech_action()
+
+        state = {'resolved': False, 'extra_delay': extra_delay, 'timer_attr': timer_attr,
+                  'delay_timer': None}
+
+        def resolve():
+            if state['resolved']:
+                return
+            state['resolved'] = True
+            if state['delay_timer']:
+                state['delay_timer'].cancel()
+            if self._pending_speech_state is state:
+                self._pending_speech_state = None
+            callback()
+
+        state['resolve'] = resolve
+
+        self._pending_speech_state = state
+        self._awaiting_speech_start = not self._robot_is_speaking
+
+    def on_robot_speaking(self, msg):
+        self._robot_is_speaking = bool(msg.data)
+
+        if self._robot_is_speaking:
+            # Le robot a commencé à parler : la prochaine transition à False sera la bonne
+            self._awaiting_speech_start = False
+            return
+
+        if self._pending_speech_state is None or self._awaiting_speech_start:
+            # Pas d'attente en cours, ou ce False appartient à une parole précédente
+            return
+
+        state = self._pending_speech_state
+
+        if state['extra_delay'] > 0:
+            timer = self.create_timer(state['extra_delay'], state['resolve'])
+            state['delay_timer'] = timer
+            setattr(self, state['timer_attr'], timer)
+        else:
+            state['resolve']()
+
     def execute_phase(self, msg):
         data = json.loads(msg.data)
         self.current_cmd  = data["phase"]
@@ -74,38 +138,33 @@ class InteractionNode(Node):
 
         self.stop_random_animation()
         self.stop_silence_timer()
+        self._cancel_pending_speech_action()
 
         if self.feedback_timer:
             self.feedback_timer.cancel()
             self.feedback_timer = None
-        
+
         if "START_INTRO" in self.current_cmd:
             self.move_head(0, 0)
             text = "Bonjour ! #LAUGH01# Je m'appelle Q.T.. Je suis ravi de faire ta connaissance. Es-tu prêt pour notre activité ?"
             self.send_robot("hi", "happy", text)
             # On ouvre le micro si besoin pour le "pret/oui"
+            self._after_speech(self.finish_feedback_loop, extra_delay=0.3)
 
-            duree = self.calculate_speech_duration(text) + 0.3
-            self.feedback_timer = self.create_timer(duree, self.finish_feedback_loop)
-            
-        elif "START_ICE_BREAKING" in self.current_cmd:  
+        elif "START_ICE_BREAKING" in self.current_cmd:
             self.move_head(0, 0)
             self.dialogue_count = 0
 
             text = config.ICE_BREAKING_QUESTION
             self.send_robot("happy", "happy", text)
-            
-            duree = self.calculate_speech_duration(text) + 0.3
-            self.feedback_timer = self.create_timer(duree, self.finish_feedback_loop)
-            
+            self._after_speech(self.finish_feedback_loop, extra_delay=0.3)
 
         elif "START_TASK_INTRO" in self.current_cmd:
             self.move_head(0, 0)
-            text = "Enfin, assez avec mes questions, revenons à notre activité. Je vais te donner une feuille avec des petites formes dessus. Ton objectif, c'est de les utiliser pour faire un dessin. Il n'y a pas de bonne ou de mauvaise réponse. Si tu as fini avant la fin du temps, tu peux me le dire."            
+            text = "Enfin, assez avec mes questions, revenons à notre activité. Je vais te donner une feuille avec des petites formes dessus. Ton objectif, c'est de les utiliser pour faire un dessin. Il n'y a pas de bonne ou de mauvaise réponse. Si tu as fini avant la fin du temps, tu peux me le dire."
             self.send_robot("None", "None", text)
             # C'est un monologue, on envoie DONE à la fin du temps de parole
-            duree = self.calculate_speech_duration(text) + 5.5
-            self.feedback_timer = self.create_timer(duree, self.finish_feedback_loop)
+            self._after_speech(self.finish_feedback_loop, extra_delay=5.5)
 
         elif "START_DRAWING" in self.current_cmd:
             self.move_head(0, config.HEAD_PITCH_DRAWING)
@@ -134,12 +193,10 @@ class InteractionNode(Node):
             self.move_head(0, 20)
             text = "C'est fini ! #MMM01# Laisse-moi admirer ton œuvre une dernière fois pour lui trouver un titre..."
             self.send_robot("happy", "happy", text)
-            
+
             self.set_stt(False)
             # On déclenche la photo après la phrase
-            wait_time = self.calculate_speech_duration(text) + 2.5
-            if self.photo_timer: self.photo_timer.cancel()
-            self.photo_timer = self.create_timer(wait_time, self.send_camera_trigger)
+            self._after_speech(self.send_camera_trigger, extra_delay=2.5, timer_attr='photo_timer')
             
         elif "START_ENDING" in self.current_cmd:
             self.move_head(0, 0)
@@ -160,13 +217,18 @@ class InteractionNode(Node):
             else:
                 return
 
-            if self.feedback_timer: self.feedback_timer.cancel()
-            duree = self.calculate_speech_duration(text)
-            self.feedback_timer = self.create_timer(duree, self.finish_feedback_loop)
+            self._after_speech(self.finish_feedback_loop)
 
         elif config.CONDITION in ("C1", "C2"):
+            self.set_stt(False)
+
             if skip_intro:
-                wait_time = 3.5
+                # Pas de phrase envoyée ici (déjà répondu à l'aveugle sur adressage) :
+                # simple pause fixe avant la photo, indépendante de toute parole
+                if self.photo_timer:
+                    self.photo_timer.cancel()
+                self.photo_timer = self.create_timer(3.5, self.send_camera_trigger)
+                self.get_logger().info(f"[{config.CONDITION}] Photo programmée dans 3.5s (skip intro)")
             else:
                 _phrases = {
                     1: ("happy",    "Oh, Faisons une pause dans le dessin que je puisse regarder. Recule un petit peu pour que la caméra puisse bien le voir."),
@@ -177,13 +239,8 @@ class InteractionNode(Node):
                 if entry:
                     emotion, text = entry
                     self.send_robot(emotion, emotion, text)
-                wait_time = max(1.0, self.calculate_speech_duration(text) - 1.0)
-
-            self.set_stt(False)
-            if self.photo_timer:
-                self.photo_timer.cancel()
-            self.photo_timer = self.create_timer(wait_time, self.send_camera_trigger)
-            self.get_logger().info(f"[{config.CONDITION}] Photo programmée dans {wait_time:.2f}s")
+                self._after_speech(self.send_camera_trigger, extra_delay=1.0, timer_attr='photo_timer')
+                self.get_logger().info(f"[{config.CONDITION}] Photo programmée après la fin de la phrase du robot")
 
     def send_camera_trigger(self):
         """ Callback du timer pour envoyer le trigger caméra """
@@ -226,14 +283,10 @@ class InteractionNode(Node):
             self.feedback_timer.cancel()
         
         self.send_robot("None", "None", msg.data)
-        
+
         self.dialogue_count += 1
 
-        duree = self.calculate_speech_duration(msg.data)
-        self.feedback_timer = self.create_timer(duree, self.finish_feedback_loop)
-           
-    def calculate_speech_duration(self, text):
-        return len(text) * 0.074
+        self._after_speech(self.finish_feedback_loop)
 
     def stt_callback(self, msg):
         if self.is_busy:
@@ -298,10 +351,9 @@ class InteractionNode(Node):
                 self.stop_silence_timer()
                 phrase = random.choice(config.C2_PHRASES_INVITE)
                 self.send_robot("None", "None", phrase)
-                invite_wait = self.calculate_speech_duration(phrase)
-                self.feedback_timer = self.create_timer(invite_wait, lambda: (
-                    self.loop_done_pub.publish(String(data=f"DONE:{self.current_cmd}"))
-                ))
+                self._after_speech(
+                    lambda: self.loop_done_pub.publish(String(data=f"DONE:{self.current_cmd}"))
+                )
 
 
         elif "START_TITLE" in self.current_cmd:
@@ -402,8 +454,7 @@ class InteractionNode(Node):
             
             # On bloque le micro le temps de la relance
             self.is_busy = True
-            duree = self.calculate_speech_duration(text)
-            self.feedback_timer = self.create_timer(duree, self.finish_feedback_loop)
+            self._after_speech(self.finish_feedback_loop)
 
 def main(args=None):
     rclpy.init(args=args)

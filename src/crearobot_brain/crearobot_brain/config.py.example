@@ -86,7 +86,6 @@ MAX_EXCHANGES = 3 # Nombre d'échanges pendant les phases d'interaction dans C1 
 DIALOGUE_DURATION = 3 # 3 nombre d'échanges durant l'ice breaking (nombre de parlage de la personne)
 
 # --- MÉMOIRE ---
-ENABLE_HISTORY = True # True pour activer, False pour désactiver l'historique
 HISTORY_LIMIT = 3 # Nombre de derniers échanges à retenir
 
 # --- Détection fin de dessin (frame differencing + médiane) ---
