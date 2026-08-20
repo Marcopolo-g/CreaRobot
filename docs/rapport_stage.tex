@@ -9,6 +9,7 @@
 \usepackage{geometry}
 \usepackage{float}
 \usepackage{pdfpages}
+\usepackage{listings}
 \usepackage{pifont}
 \usepackage{todonotes}
 \usepackage{booktabs}
@@ -19,7 +20,7 @@
 \usepackage{setspace}
 \usepackage{url}
 \usepackage{tikz}
-\usetikzlibrary{positioning}
+\usetikzlibrary{positioning,calc}
 \usepackage{titlesec}
 \titleformat{\paragraph}
   {\normalfont\bfseries}{\theparagraph}{1em}{}
@@ -67,7 +68,7 @@
 
     % Info Stage
     {\large 1er mars, 2026 – 31 août, 2026} \\[0.3cm]
-    {\large Lutin - Laboratoire CHART} \\[1cm]
+    {\large Lutin - Laboratoire CHArt} \\[1cm]
 
     % Photo de couverture
     \includegraphics[width=0.6\textwidth]{figures/lutin_intro.jpg}
@@ -85,6 +86,19 @@
     \Huge \textbf{Abstract}
 \end{center}
 \vspace{0.5cm}
+
+Social robots equipped with generative AI can provide rich, real-time feedback during creative tasks, but whether this feedback actually improves the value of what people create remains an open question.
+CreaRobot investigates whether a social robot, analyzing a participant's drawing in real time through a vision-language model, can improve creative output compared to generic feedback, within a Co-Cre-AI-tion framework where the human keeps control over the creative process.
+
+The protocol builds on the Test for Creative Thinking -- Drawing Production (TCT-DP), in which participants complete a partial drawing.
+Three conditions are compared: a scripted/neutral feedback (control), an open dialogue driven by a language model that analyzes the drawing and responds with contextualized questions and suggestions (C1) and a generative visual suggestion projected onto the drawing area (C2).
+The main technical contribution of this internship is the end-to-end software system that runs this protocol in real time on the QTRobot platform, combining speech recognition, vision-language analysis, dialogue generation, and image generation across a ROS\,1 robot and an external ROS\,2 PC.
+
+An exploratory pilot study, conducted in a public science-outreach setting, compared the control condition ($N=26$) to C1 ($N=23$); C2 was not included in this statistical comparison.
+Participants in C1 produced drawings with significantly higher TCT-DP scores than the control group (21.5 vs. 13.8, Welch's $t=-4.72$, $p<0.0001$, Cohen's $d=1.34$).
+Behavioral observations suggest, however, that part of this effect may reflect participants closely following the direction of the robot's suggestions rather than fully autonomous creativity, a nuance discussed alongside the study's methodological limitations.
+A more controlled follow-up study, directly comparing C1 and C2, is planned for the coming months.
+
 \newpage
 
 % Acknowledgments
@@ -144,7 +158,7 @@ Lorsque la production ne relève plus d'un seul créateur mais d'une collaborati
 
 Pour qu'un tel collectif fonctionne, encore faut-il que le robot soit perçu par le participant comme un véritable partenaire d'interaction et non comme un simple outil. Cette perception repose en partie sur l'anthropomorphisme, c'est-à-dire l'attribution de traits humains au robot, qui le rend plus familier et plus prévisible aux yeux de l'utilisateur ; la littérature montre toutefois que ce levier ne favorise l'acceptation du robot qu'à condition que le participant conserve un sentiment de contrôle sur l'interaction elle-même \cite{david2026}.
 
-La conception du comportement du robot doit par ailleurs composer avec une limite connue des outils génératifs : ceux-ci tendent spontanément vers la substitution plutôt que vers le soutien, en produisant à la place de l'utilisateur plutôt qu'avec lui \cite{lubart2003}. Cette tendance est renforcée par le comportement par défaut des grands modèles de langage, entraînés pour endosser un persona d'assistant serviable qui les pousse soit à acquiescer aux propositions de l'utilisateur, soit à prendre en charge la tâche à sa place \cite{lu2026} ; des travaux récents montrent qu'un pilotage plus structuré du dialogue permet de contraindre ce comportement par défaut \cite{galland2025}. Dans un contexte de co-création, la qualité d'un retour dépend également de sa nature : Rezwana et Ford \cite{rezwana2025} distinguent les suggestions divergentes, qui élargissent l'espace des possibles créatifs, des suggestions convergentes, plus adaptées aux phases de finalisation. Ces constats rejoignent la logique du prompt utilisé par le robot en condition C1, décrite en section~\ref{sec:condition_c1}.
+La conception du comportement du robot doit par ailleurs composer avec une limite connue des outils génératifs : ceux-ci tendent spontanément vers la substitution plutôt que vers le soutien, en produisant à la place de l'utilisateur plutôt qu'avec lui \cite{lubart2003}. Cette tendance est renforcée par le comportement par défaut des grands modèles de langage, entraînés pour endosser un persona d'assistant serviable qui les pousse soit à acquiescer aux propositions de l'utilisateur, soit à prendre en charge la tâche à sa place \cite{lu2026} ; des travaux récents montrent qu'un pilotage plus structuré du dialogue permet de contraindre ce comportement par défaut \cite{galland2025}. Dans un contexte de co-création, la qualité d'un retour dépend également de sa nature : Rezwana et Ford \cite{rezwana2025} distinguent les suggestions divergentes, qui élargissent l'espace des possibles créatifs, des suggestions convergentes, plus adaptées aux phases de finalisation. Ces constats rejoignent la logique du prompt utilisé par le robot en condition C1, reproduit en annexe~\ref{annexe:prompt_c1}.
 
 \subsection{Le projet CreaRobot : question de recherche et enjeux}
 
@@ -154,11 +168,10 @@ l'interaction, améliorer la créativité d'une personne en train de dessiner ?
 Pour répondre à cette question, l'expérience repose sur le test de créativité TCT-DP
 (Test for Creative Thinking – Drawing Production) \cite{urban2005}, un test standardisé
 consistant à compléter une figure géométrique partielle. Le protocole compare trois conditions
-expérimentales : un feedback neutre délivré par le robot (condition de contrôle), un échange piloté par un modèle de langage mêlant questions, suggestions et idées portant sur le dessin du participant (condition C1), et un retour visuel génératif projeté
-sur la zone de dessin (condition C2).
+expérimentales : un feedback neutre délivré par le robot (condition de contrôle), un échange piloté par un modèle de langage mêlant questions, suggestions et idées portant sur le dessin du participant (condition C1), et un retour visuel génératif, projeté à l'aide d'un vidéoprojecteur (condition C2).
 
 L'enjeu technique de ce stage est de concevoir et développer de A à Z le système logiciel
-permettant au robot social QTRobot (plateforme ROS\,1 / Python\,2.7), illustré en figure~\ref{fig:qtrobot},
+permettant au robot social QTRobot (plateforme ROS\,1 / Python\,3), illustré en figure~\ref{fig:qtrobot},
 d'interagir en temps réel avec des participants humains, en s'appuyant sur une intelligence déportée
 sur un PC externe (ROS\,2 / Python\,3) : reconnaissance vocale, traitement du langage naturel, pilotage
 des expressions et des gestes, synchronisation avec les phases du protocole.
@@ -175,27 +188,27 @@ Le système a fait l'objet d'une première passation préliminaire, à visée ex
 la Semaine de la Science Infuse en avril 2026. La passation principale est quant à elle prévue
 en octobre/novembre 2026.
 
-\subsection{Contexte du stage, laboratoire CHART et plateforme Lutin}
+\subsection{Contexte du stage, laboratoire CHArt et plateforme Lutin}
 
 \subsubsection{Contexte du stage}
 
 Ce rapport présente le travail réalisé dans le cadre d'un stage technique effectué au sein du
-laboratoire CHART, sur la plateforme Lutin, du 1\textsuperscript{er} mars 2025 au 31 août 2026.
+laboratoire CHArt, sur la plateforme Lutin, du 1\textsuperscript{er} mars 2025 au 31 août 2026.
 Ce stage s'inscrit dans le cursus ingénieur de la filière Robotique de Polytech Sorbonne
 (Sorbonne Université), en troisième année de cycle ingénieur.
 
-Le stage a été encadré par Salvatore Anzalone, maître de stage, chercheur à CHART et directeur
+Le stage a été encadré par Salvatore Anzalone, maître de stage, chercheur à CHArt et directeur
 de la plateforme Lutin, ainsi que par Mahdi Khoramshahi, tuteur académique à Polytech Sorbonne.
-Le travail a été mené en collaboration étroite avec Claudie Cuveillier, stagiaire en ergonomie, qui a notamment pris en charge la conception des protocoles de dialogue pour le robot.
+Le travail a été mené en collaboration étroite avec Claudie Cuveillier, stagiaire en ergonomie, qui a notamment pris en charge la conception du protocole expérimental et des protocoles de dialogue pour le robot.
 
-\subsubsection{Le laboratoire CHART et la plateforme Lutin}
+\subsubsection{Le laboratoire CHArt et la plateforme Lutin}
 
-Le laboratoire CHART (Cognitions Humaines et Artificielles) est une unité mixte de recherche.
+Le laboratoire CHArt (Cognitions Humaines et Artificielles) est une unité mixte de recherche.
 Ses travaux portent sur les interactions entre cognition humaine et systèmes numériques, à
 l'interface de la psychologie cognitive, des sciences de l'éducation et de l'intelligence
 artificielle.
 
-La plateforme Lutin est rattachée au laboratoire CHART et constitue son infrastructure expérimentale.
+La plateforme Lutin est rattachée au laboratoire CHArt et constitue son infrastructure expérimentale.
 Le LUTIN (Laboratoire des Usages en Technologies d'Information Numériques) contrairement à
 ce que son nom indique n’est pas un laboratoire mais est une plateforme de recherche collaborative
 et pluridisciplinaire dédiée à l'étude des sciences cognitives et de la robotique, dont l'ambition
@@ -204,7 +217,7 @@ C'est un endroit où l'on étudie comment les gens utilisent les technologies, p
 in fine, les mettre au service des utilisateurs.
 Le LUTIN est dirigé par Salvatore Anzalone, avec Ugo Ballenghein en tant que directeur adjoint,
 tous deux membres du laboratoire CHArt.
-Le LUTIN vise à développer des connaissances et des méthodes dans le champ des usages et des pratiques numériques, quels qu’en soient les domaines d’application. Pour ce faire, il dispose d’un parc d’équipements technologiques permettant l’analyse de mesures comportementales et neurophysiologiques en temps réel : eye-tracking, EEG, motion capture, réalité virtuelle, robotique ou encore dispositif de vitres sans tain pour observer les potentiels participants dans des cadres écologiques. Ces outils permettent d’aller bien au-delà du simple questionnaire et d’investiguer au mieux les comportements réels des utilisateurs face à une technologie.
+Le LUTIN vise à développer des connaissances et des méthodes dans le champ des usages et des pratiques numériques, autour de trois axes de recherche prioritaires : la médiation et l'éducation (fonctions cognitives, langagières, motrices et perceptives impliquées dans l'apprentissage et la résolution de problèmes), la santé (développement, vieillissement, processus pathologiques, outils de soin et de rééducation), et la créativité (art numérique, IA générative, performances artistiques numériques). Pour ce faire, il dispose d’un parc d’équipements technologiques permettant l’analyse de mesures comportementales et neurophysiologiques en temps réel : eye-tracking, EEG, motion capture, réalité virtuelle, robotique ou encore dispositif de vitres sans tain pour observer les potentiels participants dans des cadres écologiques. Ces outils permettent d’aller bien au-delà du simple questionnaire et d’investiguer au mieux les comportements réels des utilisateurs face à une technologie.
 
 \newpage
 
@@ -264,11 +277,11 @@ En condition C1, le robot engage un échange piloté par un modèle de langage, 
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.85\textwidth]{figures/feedback_C1.png}
-    \caption{Exemple illustratif d'échange en condition C1.}
+    \caption{Exemple d'échange en condition C1.}
     \label{fig:c1_example}
 \end{figure}
 
-\subsubsection{Condition C2 : feedback visuel génératif (projection)}
+\subsubsection{Condition C2 : feedback visuel génératif}
 
 En condition C2, le robot invite le participant à regarder une proposition visuelle de son dessin, générée puis projetée sur un mur (figure~\ref{fig:c2_example}). Concrètement, le système génère une image en se basant sur ce que le participant a lui-même dessiné : une photo de sa feuille est prise à la fin du tour, puis un modèle génératif produit une version augmentée du dessin, qui complète les éléments du test TCT-DP non encore utilisés et ajoute également de nouveaux éléments s'intégrant au dessin existant, tout en respectant le style et les traits déjà posés par le participant. Cette proposition est ensuite montrée au participant à l'aide d'un vidéoprojecteur qui l'affiche sur un mur de la pièce, et le robot prononce une courte phrase qui l'invite à regarder cette proposition et à en faire ce qu'il veut, qu'il choisisse de s'en inspirer ou de continuer selon sa propre vision. Le prompt complet est reproduit en annexe~\ref{annexe:prompt_c2}.
 
@@ -281,9 +294,9 @@ En condition C2, le robot invite le participant à regarder une proposition visu
 
 \subsubsection{Les sept phases de l'expérience}
 
-L'expérience se déroule en sept phases successives, illustrées en figure~\ref{fig:session}. Elle débute par une phase d'introduction (\texttt{INTRO}), pendant laquelle le robot se présente au participant et attend une confirmation orale de sa part pour démarrer. Suit une phase de ice breaking (\texttt{ICE\_BREAKING}), un court échange de trois interventions amicales visant à mettre le participant à l'aise avant la tâche. La troisième phase (\texttt{TASK\_INTRO}) consiste en l'explication par le robot des consignes du test TCT-DP.
+L'expérience se déroule en sept phases successives, illustrées en figure~\ref{fig:session}. Elle débute par une phase d'introduction (\texttt{INTRO}), pendant laquelle le robot se présente au participant et attend une confirmation orale de sa part pour démarrer. Suit une phase de ice breaking (\texttt{ICE\_BREAKING}), un court échange de trois interventions amicales visant à mettre le participant à l'aise avant la tâche, et à lui faire comprendre qu'il peut réellement échanger avec le robot, de façon à ce qu'il continue à lui parler une fois en condition C1. La troisième phase (\texttt{TASK\_INTRO}) consiste en l'explication par le robot des consignes du test TCT-DP.
 
-Vient ensuite la phase de dessin (\texttt{DRAWING}), durant laquelle le participant dispose de 90 secondes pour dessiner, suivie d'une phase de feedback (\texttt{FEEDBACK}) durant laquelle le robot adresse un retour au participant selon la condition expérimentale décrite ci-dessus. Ce cycle dessin puis feedback est répété trois fois avant de passer à la suite. Enfin, l'expérience se referme sur deux dernières phases : le robot observe une dernière fois le dessin pour lui proposer un titre (\texttt{TITLE}), puis salue le participant et met fin à la session (\texttt{ENDING}).
+Vient ensuite la phase de dessin (\texttt{DRAWING}), durant laquelle le participant dispose de 90 secondes pour dessiner, suivie d'une phase de feedback (\texttt{FEEDBACK}) durant laquelle le robot adresse un retour au participant selon la condition expérimentale décrite ci-dessus. Ce cycle dessin puis feedback est répété deux fois ; un troisième et dernier tour de dessin suit, sans feedback cette fois, avant de passer à la suite. Enfin, l'expérience se referme sur deux dernières phases : le robot observe une dernière fois le dessin pour lui proposer un titre (\texttt{TITLE}), puis salue le participant et met fin à la session (\texttt{ENDING}).
 
 \begin{figure}[H]
     \centering
@@ -341,7 +354,7 @@ Le robot utilisé dans ce projet est un QTRobot V2 de la société LuxAI. Il s'a
 
 Le QTRobot repose sur deux unités de calcul embarquées reliées entre elles par câble Ethernet : une Raspberry Pi logée dans la tête (QTRP), qui initialise l'environnement ROS au démarrage, et un mini-PC situé dans le corps (QTPC). Les deux machines partagent le même espace ROS.
 
-La figure~\ref{fig:archi_robot} présente l'ensemble des composants du robot. La répartition des périphériques suit une logique fonctionnelle : l'écran, les haut-parleurs, le réseau de microphones directionnels et les moteurs des bras sont rattachés au QTRP, tandis que la caméra 3D RealSense est connectée directement au QTPC. Deux ports sont également accessibles à l'arrière du robot : un port USB standard côté QTRP, et un port USB-C côté QTPC, permettant de brancher clavier, souris et écran via un hub.
+La figure~\ref{fig:archi_robot} présente l'ensemble des composants du robot. La répartition des périphériques suit une logique fonctionnelle : l'écran, les haut-parleurs, le réseau de microphones directionnels et les moteurs des bras et de la tête sont rattachés au QTRP, tandis que la caméra 3D RealSense est connectée directement au QTPC. Deux ports sont également accessibles à l'arrière du robot : un port USB standard côté QTRP, et un port USB-C côté QTPC, permettant de brancher clavier, souris et écran via un hub.
 
 \begin{figure}[H]
     \centering
@@ -387,24 +400,11 @@ La <VALEUR> de volume est un entier compris entre 0 et 100. Les behaviors permet
 \subsubsection{Choix architecturaux}
 \label{sec:architecture}
 
-% Intro : avant d'aboutir à l'architecture finale, une première
-% approche a consisté à garder toute l'intelligence sur le robot lui-même —
-% utiliser son micro ReSpeaker et sa caméra intégrée. Cette piste a été
-% abandonnée pour plusieurs raisons :
-% (1) Qualité du micro : en présence de bruit ambiant, la reconnaissance
-%     vocale était instable.
-% (2) Dépendances Python 2 / Python 3 : tenter d'installer des libs récentes
-%     sur le robot crée des conflits insolubles (voir ci-dessous, qt_vosk_app).
-% (3) Caméra : fixée sur la tête de QT, elle ne peut pas photographier un
-%     dessin posé sur une table sans que le participant ne le soulève.
-% Solution retenue : externaliser les capteurs sur le PC (micro intégré du PC
-% + caméra externe) et y concentrer toute l'intelligence du système.
-
 \paragraph{Tentative initiale : capteurs embarqués sur le robot}
 
 Le robot utilisé en début de stage était le QTRobot V1 (voir plus haut). La première difficulté rencontrée concerne la reconnaissance vocale. Le QTRobot V1 est censé embarquer \texttt{qt\_vosk\_app}, un module de reconnaissance vocale hors-ligne basé sur Vosk. Ce module était absent de la version du robot disponible au laboratoire. Une recherche a permis de retrouver une version du module publiée par LuxAI, mais celle-ci était conçue pour le QTRobot V2, qui fonctionne sous Python\,3, alors que le V1 tourne sous Python\,2. De nombreuses tentatives d'adaptation ont été menées, mais chacune se heurtait à des conflits de dépendances de bibliothèques insolubles : Vosk n'existe tout simplement pas pour Python\,2, et un pont Python\,2/Python\,3 aurait représenté une complexité injustifiée.
 
-Face à cet échec, deux solutions alternatives ont été développées et exécutées directement sur le robot, en tirant parti de son microphone embarqué. L'extension Remote SSH de VS Code a été utilisée pendant cette phase pour éditer les fichiers directement dans le robot, tandis que la connexion SFTP (\texttt{sftp://qtrobot@192.168.100.1}) permettait de gérer les fichiers depuis le PC. La première solution, \texttt{ears.py}, tournait entièrement sur le robot et effectuait la reconnaissance vocale via la bibliothèque Python \texttt{speech\_recognition} et sa méthode \texttt{recognize\_google()}, qui transmet l'audio au service de reconnaissance Google sans clé API. La seconde, \texttt{ears\_v2.py}, tournait elle aussi sur le robot mais déportait le traitement : elle se contentait de capturer le flux audio du microphone et de l'envoyer vers le PC, où la reconnaissance était réalisée. Ces deux approches n'ont finalement pas donné de résultats satisfaisants : la reconnaissance restait peu fiable et la latence trop importante pour un usage en temps réel. Comme la caméra du robot devait de toute façon être remplacée par une caméra externe, le choix s'est porté sur une externalisation complète des capteurs, à commencer par un microphone externe branché sur le PC, pour garder davantage de contrôle sur toute la chaîne de traitement.
+Face à cet échec, deux solutions alternatives ont été développées et exécutées directement sur le robot, en tirant parti de son microphone embarqué. L'extension Remote SSH de VS Code a été utilisée pendant cette phase pour éditer les fichiers directement dans le robot, tandis que la connexion SFTP (\texttt{sftp://qtrobot@192.168.100.1}) permettait de gérer les fichiers depuis le PC. La première solution, \texttt{ears.py}, tournait entièrement sur le robot et effectuait la reconnaissance vocale via la bibliothèque Python \texttt{speech\_recognition} et sa méthode \texttt{recognize\_google()}, qui transmet l'audio au service de reconnaissance Google sans clé API. La seconde, \texttt{ears\_v2.py}, tournait elle aussi sur le robot mais déportait le traitement : elle se contentait de capturer le flux audio du microphone du robot et de l'envoyer vers le PC, où la reconnaissance était réalisée. Ces deux approches n'ont finalement pas donné de résultats satisfaisants : la reconnaissance restait peu fiable et la latence trop importante pour un usage en temps réel. Comme la caméra du robot devait de toute façon être remplacée par une caméra externe, le choix s'est porté sur une externalisation complète des capteurs, à commencer par un microphone externe branché sur le PC, pour garder davantage de contrôle sur toute la chaîne de traitement.
 
 \paragraph{Solution retenue : externalisation sur le PC ROS\,2}
 
@@ -414,7 +414,7 @@ Cette externalisation présente plusieurs avantages. Elle rend le système indé
 
 \subsubsection{Développement des composants}
 
-Le système est organisé en trois couches : une couche logique qui pilote le déroulement de l'expérience (\texttt{orchestrator\_node}), une couche d'interaction qui traduit chaque phase en actions concrètes pour le robot (\texttt{interaction\_node}), et une couche de cognition qui regroupe l'intelligence artificielle et la perception (\texttt{brain\_node}, \texttt{stt\_node}, \texttt{vision\_node}, \texttt{drawing\_detector\_node}, \texttt{projection\_node}). Cette séparation rend le système modulaire : elle permet de modifier le timing, les phrases ou le comportement du modèle de langage sans avoir à toucher au reste du système, mais aussi d'adapter plus largement les phases et le déroulement de l'expérience, par exemple pour un protocole différent de celui de CreaRobot. Cette modularité est renforcée par la centralisation de la quasi-totalité des paramètres dans un unique fichier de configuration (\texttt{config.py}) : durées et seuils des différents mécanismes, phrases scriptées des conditions C0 et C2, et l'ensemble des prompts système utilisés par \texttt{brain\_node} pour C1, C2 et la détection d'adressage, tous reproduits en annexe. Ajuster le comportement du système, que ce soit un minuteur ou un prompt entier, ne nécessite ainsi de modifier qu'un seul fichier, sans toucher au code des nœuds eux-mêmes. La figure~\ref{fig:archi_systeme} présente l'ensemble de ces nœuds, tous exécutés côté PC (ROS\,2), leurs connexions, ainsi que leur liaison avec le matériel du robot (ROS\,1).
+Le système est organisé en trois couches : une couche logique qui pilote le déroulement de l'expérience (\texttt{orchestrator\_node}), une couche d'interaction qui traduit chaque phase en actions concrètes pour le robot (\texttt{interaction\_node}), relayées vers le robot par \texttt{gateway\_node} (voir plus loin), et une couche de cognition qui regroupe l'intelligence artificielle et la perception (\texttt{brain\_node}, \texttt{stt\_node}, \texttt{vision\_node}, \texttt{drawing\_detector\_node}, \texttt{projection\_node}). Cette séparation rend le système modulaire : elle permet de modifier le timing, les phrases ou le comportement du modèle de langage sans avoir à toucher au reste du système, mais aussi d'adapter plus largement les phases et le déroulement de l'expérience, par exemple pour un protocole différent de celui de CreaRobot. Cette modularité est renforcée par la centralisation de la quasi-totalité des paramètres dans un unique fichier de configuration (\texttt{config.py}) : la condition expérimentale active (C0, C1 ou C2), durées et seuils des différents mécanismes, phrases scriptées des conditions C0 et C2, et l'ensemble des prompts système utilisés par \texttt{brain\_node} pour C1, C2 et la détection d'adressage, tous reproduits en annexe. Ajuster le comportement du système, que ce soit un minuteur ou un prompt entier, ne nécessite ainsi de modifier qu'un seul fichier, sans toucher au code des nœuds eux-mêmes. La figure~\ref{fig:archi_systeme} présente l'ensemble de ces nœuds, tous exécutés côté PC (ROS\,2), leurs connexions, ainsi que leur liaison avec le matériel du robot (ROS\,1).
 
 \begin{figure}[H]
     \centering
@@ -437,9 +437,9 @@ Le nœud d'interaction reçoit les ordres de phase publiés par l'orchestrateur 
 
 La phase \texttt{DRAWING} a un comportement plus spécifique que les autres : elle envoie une phrase d'encouragement différente selon le tour, oriente la tête selon un angle configurable (\texttt{HEAD\_PITCH\_DRAWING}, tête droite par défaut), ouvre le micro, et programme de petites animations aléatoires (toutes les 40 à 80 secondes) pour que le robot ne reste pas figé, la tête revenant à sa position de dessin quatre secondes après chaque animation.
 
-La logique de la phase \texttt{FEEDBACK} dépend de la condition expérimentale : en C0, une phrase générique est tirée aléatoirement selon le tour, sans prise de photo ; en C1 et C2, une photo est prise en tout début de phase, précédée d'une courte phrase d'introduction ; si le tour a été interrompu par un adressage du participant, cette phrase a déjà été donnée par \texttt{brain\_node} au moment de la détection (voir le paragraphe qui lui est consacré ci-après), et n'est donc pas répétée ici. L'échange C1 se poursuit ensuite sur trois tours au maximum, tandis que le feedback C2 affiche une phrase d'invitation à s'inspirer une fois l'image générée reçue. Cette prise de photo, comme celle de la phase \texttt{TITLE}, se fait en publiant sur le topic \texttt{/pc/camera/trigger}, que \texttt{vision\_node} écoute pour déclencher la capture (voir plus loin). 
+La logique de la phase \texttt{FEEDBACK} dépend de la condition expérimentale : en C0, une phrase générique est tirée aléatoirement selon le tour, sans prise de photo ; en C1 et C2, une photo est prise en tout début de phase, précédée d'une courte phrase d'introduction ; si le tour a été interrompu par un adressage du participant, cette phrase a déjà été donnée par \texttt{brain\_node} au moment de la détection et n'est donc pas répétée ici. L'échange C1 se poursuit ensuite sur trois tours au maximum, tandis que le feedback C2 affiche une phrase d'invitation à s'inspirer une fois l'image générée reçue. Cette prise de photo, comme celle de la phase \texttt{TITLE}, se fait en publiant sur le topic \texttt{/pc/camera/trigger}, que \texttt{vision\_node} écoute pour déclencher la capture (voir plus loin). 
 
-Le nœud contrôle également l'activation du micro selon la phase, via le topic \texttt{/pc/stt/enable} : c'est lui qui décide, à chaque instant, si une réponse du participant est attendue ou non (le verrouillage complet, incluant le silence du robot pendant qu'il parle, est détaillé dans le paragraphe consacré à \texttt{stt\_node}). Il gère aussi une relance automatique en cas de silence prolongé du participant. Pour enchaîner ses propres actions (rouvrir le micro, déclencher la photo, passer à la phase suivante) au bon moment, il s'abonne au signal réel \texttt{/pc/robot/speaking} publié par \texttt{gateway\_node} (voir plus bas) et attend que le robot ait effectivement fini de parler.
+Le nœud contrôle également l'activation du micro selon la phase, via le topic \texttt{/pc/stt/enable} : c'est lui qui décide, à chaque instant, si une réponse du participant est attendue ou non (le verrouillage complet, incluant le silence du robot pendant qu'il parle, est détaillé dans le paragraphe consacré à \texttt{stt\_node}). Il gère aussi une relance automatique en cas de silence prolongé du participant : si aucune parole n'est détectée pendant 15 secondes, le robot prononce une courte phrase (« Que penses-tu de ce que j'ai dit ? ») pour relancer l'échange. Pour enchaîner ses propres actions (rouvrir le micro, déclencher la photo, passer à la phase suivante) au bon moment, il s'abonne au signal réel \texttt{/pc/robot/speaking}, publié par \texttt{gateway\_node} (voir plus loin, paragraphe consacré à \texttt{gateway\_node}), et attend que le robot ait effectivement fini de parler.
 
 \paragraph{Le nœud d'intelligence artificielle (\texttt{brain\_node})}
 \label{sec:brain_node}
@@ -448,27 +448,27 @@ Le \texttt{brain\_node} concentre l'intelligence artificielle du système, via l
 
 Pendant la phase \texttt{DRAWING}, chaque transcription STT est analysée dans un thread séparé pour déterminer si le participant s'adresse au robot. Si c'est le cas et que la phase n'a pas changé entretemps, le nœud envoie immédiatement une courte réponse à l'aveugle et publie un signal sur \texttt{/pc/brain/addressing\_detected}, que l'orchestrateur utilise pour interrompre le minuteur de dessin en cours ; la phrase du participant est mémorisée pour être réintégrée dans le prochain prompt de feedback. Si une nouvelle transcription arrive pendant qu'une vérification est en cours, seule la plus récente est traitée.
 
-À chaque photo reçue, le nœud maintient une mémoire visuelle cumulative du dessin : la première photo produit une description complète, chaque photo suivante ne décrit que ce qui a changé, le tout étant concaténé plutôt que de redemander une description complète à chaque fois. En condition C1, le nœud déclenche alors la génération d'une réponse, construite à partir du prompt système (section~\ref{sec:condition_c1}), de l'historique de la conversation et de cette mémoire visuelle. Si le participant s'était adressé au robot juste avant la photo, sa phrase aurait été intégrée au prompt pour que la réponse en tienne compte.
+À chaque photo reçue, le nœud maintient une mémoire visuelle cumulative du dessin : la première photo produit une description complète, chaque photo suivante ne décrit que ce qui a changé, le tout étant concaténé plutôt que de redemander une description complète à chaque fois. En condition C1, le nœud déclenche alors la génération d'une réponse, construite à partir du prompt système (le message de rôle \texttt{system} envoyé à l'API, qui fixe une fois pour toute la conversation les instructions et la posture du robot, par opposition aux messages \texttt{user}/\texttt{assistant} qui s'accumulent au fil de l'échange), de l'historique de la conversation et de cette mémoire visuelle. Si le participant s'était adressé au robot juste avant la photo, sa phrase aurait été intégrée au prompt pour que la réponse en tienne compte.
 
-En condition C2, la photo reçue déclenche un traitement différent : une description de l'intention du participant est d'abord produite (\texttt{PROMPT\_C2\_ANALYSIS}, reproduit en annexe~\ref{annexe:prompt_c2_analysis}), puis transmise avec le dessin et la feuille TCT-DP vierge de référence (section~\ref{sec:tctdp_description}) à gpt-image-1.5, qui génère une version augmentée. L'image obtenue est redimensionnée puis publiée pour \texttt{projection\_node} (voir plus bas) ; le robot prononce ensuite une courte phrase annonçant sa proposition, adaptée selon qu'un adressage a eu lieu ou non juste avant.
+En condition C2, la photo reçue déclenche un traitement différent : une description de l'intention du participant est d'abord produite (\texttt{PROMPT\_C2\_ANALYSIS}, reproduit en annexe~\ref{annexe:prompt_c2_analysis}), puis transmise avec le dessin et la feuille TCT-DP vierge de référence (section~\ref{sec:tctdp_description}) à gpt-image-1.5, qui génère une version augmentée. L'image obtenue est redimensionnée puis publiée pour \texttt{projection\_node} ; le robot prononce ensuite une courte phrase annonçant sa proposition, adaptée selon qu'un adressage a eu lieu ou non juste avant.
 
 Pendant les phases \texttt{FEEDBACK} (C1) et \texttt{ICE\_BREAKING}, chaque nouvelle réponse du participant relance un appel au modèle de langage : le message envoyé combine le prompt système de la phase en cours (\texttt{PROMPT\_C1} ou \texttt{PROMPT\_ICE\_BREAKING} selon le cas), les \texttt{HISTORY\_LIMIT} derniers échanges de l'historique (paramètre de \texttt{config.py}, fixé à trois par défaut), et la réponse du participant. Un indicateur (\texttt{\_c1\_ready}) empêche qu'une transcription arrivée trop tôt ne soit comptée comme un échange valide avant que la première réponse du tour n'ait été générée.
 
-Enfin, \texttt{brain\_node} tient le journal de chaque session (voir plus loin) et envoie un appel de chauffe au démarrage vers GPT-4o-mini, et vers gpt-image-1.5 en condition C2, pour absorber la latence de démarrage (jusqu'à une minute pour le premier appel d'image) avant le premier vrai feedback.
+Enfin, \texttt{brain\_node} tient les logs de chaque session (voir la partie journalisation) et envoie un appel de chauffe au démarrage vers GPT-4o-mini, et vers gpt-image-1.5 en condition C2, pour absorber la latence de démarrage (jusqu'à une minute pour le premier appel d'image) avant le premier vrai feedback.
 
 \paragraph{Le nœud Gateway (\texttt{gateway\_node})}
 
 Le rosbridge du QTRobot V1 était un simple pont WebSocket, accessible sans authentification. Sur le V2, le rosbridge actif par défaut impose une authentification HMAC via le service \texttt{/authenticate} (\texttt{rosauth}), non supportée par la bibliothèque roslibpy utilisée par \texttt{gateway\_node} pour communiquer avec le robot. Une seconde instance de rosbridge, sans SSL ni authentification, a donc été lancée sur QTRP sur un port dédié (9091) (solution recommandée par la documentation LuxAI pour ce cas de figure), intégrée à l'autostart du robot pour être disponible à chaque démarrage. C'est ce second rosbridge que \texttt{gateway\_node} utilise pour se connecter au robot.
 
-Une fois connecté, \texttt{gateway\_node} configure automatiquement la langue et le volume de la voix du robot à partir de \texttt{config.py}, puis agit comme traducteur universel entre le reste du système et les services ROS\,1 du robot : il écoute le topic \texttt{/pc/qtaction} (un triplet JSON \texttt{[geste, emotion, texte]}) et déclenche les appels de service correspondants. Trois cas sont distingués : un texte seul déclenche directement le behavior de parole du robot, qui anime aussi la bouche en synchronisation (plutôt qu'un simple service de synthèse vocale) ; un geste ou une émotion sans texte est joué immédiatement ; et lorsque texte, geste et émotion sont combinés, ce même behavior de parole est lancé en parallèle avec les appels de geste et d'émotion via un synchroniseur dédié (\texttt{TaskSynchronizer}, basé sur \texttt{asyncio}). Il relaie par ailleurs séparément les commandes d'orientation de la tête reçues d'\texttt{interaction\_node}, et publie un indicateur \texttt{/pc/robot/speaking} pendant qu'il parle, utilisé par \texttt{stt\_node} (voir plus bas) pour éviter que le robot ne s'écoute lui-même.
+Une fois connecté, \texttt{gateway\_node} configure automatiquement la langue et le volume de la voix du robot à partir de \texttt{config.py}, puis agit comme traducteur universel entre le reste du système et les services ROS\,1 du robot : il écoute le topic \texttt{/pc/qtaction} (un triplet JSON \texttt{[geste, emotion, texte]}) et déclenche les appels de service correspondants. Trois cas sont distingués : un texte seul déclenche directement le behavior de parole du robot, qui anime aussi la bouche en synchronisation (plutôt qu'un simple service de synthèse vocale) ; un geste ou une émotion sans texte est joué immédiatement ; et lorsque texte, geste et émotion sont combinés, ce même behavior de parole est lancé en parallèle avec les appels de geste et d'émotion via un synchroniseur dédié (\texttt{TaskSynchronizer}, basé sur \texttt{asyncio}). Il relaie par ailleurs séparément les commandes d'orientation de la tête reçues d'\texttt{interaction\_node}, et publie un indicateur \texttt{/pc/robot/speaking} : il passe à \texttt{True} au moment où \texttt{gateway\_node} déclenche l'appel de service ROS\,1 qui fait parler le robot, puis repasse à \texttt{False} une fois cet appel terminé, c'est-à-dire une fois que le robot a réellement fini de parler. Ce signal est utilisé par \texttt{interaction\_node} pour enchaîner ses propres actions au bon moment, et par \texttt{stt\_node} pour éviter que le robot ne s'écoute lui-même.
 
 \paragraph{Le nœud de reconnaissance vocale (\texttt{stt\_node})}
 
-Le nœud de reconnaissance vocale tourne sur le PC et utilise son micro intégré (ou un micro externe, au choix) plutôt que celui du robot (voir section~\ref{sec:architecture}). Il repose sur Faster-Whisper, modèle \texttt{small} sur GPU (CUDA, \texttt{float16}), avec un repli automatique sur le modèle \texttt{base} en CPU (\texttt{int8}) si aucun GPU n'est disponible. L'audio est capturé en continu, mais n'est transcrit et publié que lorsque deux conditions sont réunies : le micro a été activé par \texttt{interaction\_node} via le topic \texttt{/pc/stt/enable}, et le robot n'est pas lui-même en train de parler, signalé par \texttt{gateway\_node} sur \texttt{/pc/robot/speaking}. Ce second signal implémente un verrouillage demi-duplex : dès que \texttt{gateway\_node} lance un appel de parole, il publie \texttt{True} sur ce topic, ce qui vide immédiatement le tampon audio de \texttt{stt\_node} et suspend l'écoute, avant de republier \texttt{False} une fois la phrase terminée pour la réactiver ; ce mécanisme évite que le robot ne capte sa propre voix et ne s'y réponde. Une transcription n'est publiée qu'après au moins 0,9\,seconde de silence en fin de tampon audio, ce qui laisse au participant le temps de terminer sa phrase sans la couper prématurément. Un filtre écarte enfin certaines hallucinations connues de Whisper : le texte transcrit est comparé à une liste de formulations récurrentes observées (mentions de sous-titrage, incitations à s'abonner, etc.), et la transcription est écartée si elle en contient une.
+Le nœud de reconnaissance vocale tourne sur le PC et utilise son micro intégré (ou un micro externe, au choix) plutôt que celui du robot. Il repose sur Faster-Whisper, modèle \texttt{small} sur GPU (CUDA, \texttt{float16}), avec un repli automatique sur le modèle \texttt{base} en CPU (\texttt{int8}) si aucun GPU n'est disponible. L'audio est capturé en continu, mais n'est transcrit et publié que lorsque deux conditions sont réunies : le micro a été activé par \texttt{interaction\_node} via le topic \texttt{/pc/stt/enable}, et le robot n'est pas lui-même en train de parler, signalé par \texttt{gateway\_node} sur \texttt{/pc/robot/speaking}. Ce second signal implémente un verrouillage demi-duplex : dès que \texttt{gateway\_node} lance un appel de parole, il publie \texttt{True} sur ce topic, ce qui vide immédiatement le tampon audio de \texttt{stt\_node} et suspend l'écoute, avant de republier \texttt{False} une fois la phrase terminée pour la réactiver ; ce mécanisme évite que le robot ne capte sa propre voix et ne s'y réponde. Une transcription n'est publiée qu'après au moins 0,9\,seconde de silence en fin de tampon audio, ce qui laisse au participant le temps de terminer sa phrase sans la couper prématurément. Un filtre écarte enfin certaines hallucinations connues de Whisper : le texte transcrit est comparé à une liste de formulations récurrentes observées (mentions de sous-titrage, incitations à s'abonner, etc.), et la transcription est écartée si elle en contient une.
 
 \paragraph{Le nœud de vision (\texttt{vision\_node})}
 
-\texttt{vision\_node} photographie le dessin du participant via une caméra USB externe (voir section~\ref{sec:architecture}) : il attend un déclenchement sur le topic \texttt{/pc/camera/trigger} (publié par \texttt{interaction\_node}, voir plus haut), ouvre la caméra, vide les cinq premières frames du tampon pour garantir une image à jour, capture, puis relâche immédiatement la caméra. La photo est encodée en JPEG base64 et publiée pour \texttt{brain\_node} ; son enregistrement dans le dossier de la session est décrit plus loin, dans la partie consacrée à la journalisation.
+\texttt{vision\_node} photographie le dessin du participant via une caméra USB externe : il attend un déclenchement sur le topic \texttt{/pc/camera/trigger} (publié par \texttt{interaction\_node}, voir plus haut), ouvre la caméra, vide les cinq premières frames du tampon pour garantir une image à jour, capture, puis relâche immédiatement la caméra. La photo est encodée en JPEG base64 et publiée pour \texttt{brain\_node} ; son enregistrement dans le dossier de la session est décrit plus loin, dans la partie consacrée à la journalisation.
 
 Une variante, \texttt{vision\_node\_temp}, capture un écran HDMI externe plutôt qu'une caméra ; elle a été développée pour la Semaine de la Science Infuse (voir section~\ref{sec:scienceinfuse}).
 
@@ -481,7 +481,7 @@ La limite principale de cette approche est qu'elle ne distingue pas un participa
 
 \paragraph{Le nœud de projection (\texttt{projection\_node})}
 
-Le nœud de projection reçoit sur le topic \texttt{/pc/projector/image} les images publiées par \texttt{brain\_node} et les affiche en plein écran via OpenCV. Le projecteur est détecté automatiquement via \texttt{xrandr} ; en son absence, la fenêtre s'affiche simplement sur l'écran principal. L'enregistrement de chaque image reçue est décrit plus loin, dans la partie consacrée à la journalisation. L'image reste affichée pendant une durée configurable (\texttt{PROJECTION\_DISPLAY\_DURATION}), après quoi l'écran revient à un fond blanc ; ce minuteur est indépendant du reste du système et n'influence pas la transition vers la phase suivante, gérée séparément par \texttt{orchestrator\_node}.
+Le nœud de projection reçoit sur le topic \texttt{/pc/projector/image} les images publiées par \texttt{brain\_node} et les affiche en plein écran via OpenCV. Le projecteur est détecté automatiquement via \texttt{xrandr} ; en son absence, la fenêtre s'affiche simplement sur l'écran principal. L'image reste affichée pendant une durée configurable (\texttt{PROJECTION\_DISPLAY\_DURATION}), après quoi l'écran revient à un fond blanc ; ce minuteur est indépendant du reste du système et n'influence pas la transition vers la phase suivante, gérée séparément par \texttt{orchestrator\_node}.
 
 \paragraph{Système de lancement (\texttt{launch.py})}
 
@@ -500,11 +500,11 @@ ros2 run crearobot_brain orchestrator
 \paragraph{Journalisation automatique des sessions expérimentales}
 \label{sec:logging}
 
-Chaque session s'appuie sur un même dossier horodaté (\texttt{crearobot\_sessions/AAAA-MM-JJ/HH-MM-SS/}), créé au démarrage par \texttt{brain\_node} (voir plus haut) et transmis aux autres nœuds concernés via le topic latché \texttt{/pc/session\_dir}. Ce dossier réunit trois éléments, détaillés dans le tableau~\ref{tab:session_structure} : un fichier \texttt{conversation.log}, et deux sous-dossiers d'images, \texttt{dessins/} et \texttt{dessins\_generes/}.
+Chaque session s'appuie sur un même dossier horodaté (\texttt{crearobot\_sessions/AAAA-MM-JJ/HH-MM-SS/}), créé au démarrage par \texttt{brain\_node} et transmis aux autres nœuds concernés via le topic latché \texttt{/pc/session\_dir}. Ce dossier réunit trois éléments, détaillés dans le tableau~\ref{tab:session_structure} : un fichier \texttt{conversation.log}, et deux sous-dossiers d'images, \texttt{dessins/} et \texttt{dessins\_generes/}.
 
-\texttt{brain\_node} écrit lui-même le fichier \texttt{conversation.log} : chaque ligne est horodatée et préfixée par un mot-clé : \texttt{PARTICIPANT} pour les transcriptions STT, \texttt{ROBOT} pour le texte prononcé par le robot, et \texttt{PHASE} pour chaque transition d'état, cette dernière incluant le numéro de tour et, pour les sorties de la phase de dessin, la cause de la transition (adressage détecté, minuteur expiré, inactivité détectée par frame differencing, ou commande manuelle depuis le terminal).
+\texttt{brain\_node} écrit lui-même le fichier \texttt{conversation.log} : chaque ligne est horodatée et préfixée par un mot-clé : \texttt{PARTICIPANT} pour les transcriptions STT, \texttt{ROBOT} pour le texte prononcé par le robot, et \texttt{PHASE} pour chaque transition d'état, cette dernière incluant le numéro de tour et, pour les sorties de la phase de dessin, la cause de la transition (adressage détecté, minuteur expiré, inactivité détectée par frame differencing, ou commande manuelle depuis le terminal). Un exemple complet est reproduit en annexe~\ref{annexe:log_c1}.
 
-Les deux sous-dossiers, eux, sont remplis séparément par \texttt{vision\_node} et \texttt{projection\_node}, pour y ranger respectivement les photos du dessin réel et les images générées en condition C2, chaque fichier étant nommé avec son index, la phase, le tour et l'heure exacte.
+Les deux sous-dossiers, eux, sont remplis séparément par \texttt{vision\_node} et \texttt{projection\_node}, pour y ranger respectivement les photos du dessin réel et les images générées en condition C2, chaque fichier étant nommé avec son index, la phase, le tour et l'heure exacte. Le nombre de photos varie selon la condition : dans \texttt{trigger\_feedback}, aucune capture caméra n'est déclenchée pendant les phases \texttt{FEEDBACK} en condition C0, contrairement à C1 et C2 ; seule la phase \texttt{TITLE}, commune à toutes les conditions, capture une photo. Il n'existe donc pas de photo intermédiaire pour C0.
 
 \begin{table}[H]
     \centering
@@ -531,7 +531,7 @@ Les deux sous-dossiers, eux, sont remplis séparément par \texttt{vision\_node}
 
 \subsubsection{Contexte et objectifs de cette phase pilote}
 
-Cette première passation s'est déroulée à la Cité des Sciences et de l'Industrie, à Paris, dans le cadre de la Semaine de la Science Infuse, un événement public d'une semaine organisé chaque année (édition d'avril 2026 pour cette passation). Elle poursuivait trois objectifs : obtenir de premiers résultats préliminaires, mener une étude exploratoire à partir des données recueillies, et tester le système en conditions réelles, avec des participants de passage plutôt que recrutés spécifiquement pour l'étude. Ces conditions restaient cependant éloignées de celles, plus contrôlées, envisagées pour la passation principale (voir les limites de l'étude exploratoire, section~\ref{sec:limites}). Cette passation s'est déroulée avec le QTRobot V1, avant son remplacement par le V2 (voir section~\ref{sec:qtrobot}).
+Cette première passation s'est déroulée à la Cité des Sciences et de l'Industrie, à Paris, dans le cadre de la Semaine de la Science Infuse, un événement public d'une semaine organisé chaque année (édition d'avril 2026 pour cette passation). Elle poursuivait trois objectifs : obtenir de premiers résultats préliminaires, mener une étude exploratoire à partir des données recueillies, et tester le système en conditions réelles, avec des participants de passage plutôt que recrutés spécifiquement pour l'étude. Ces conditions restaient cependant éloignées de celles, plus contrôlées, envisagées pour la passation principale (voir les limites de l'étude exploratoire, section~\ref{sec:limites} et section~\ref{sec:limites_techniques}). Cette passation s'est déroulée avec le QTRobot V1, avant son remplacement par le V2.
 
 \subsubsection{Déroulement}
 
@@ -546,170 +546,372 @@ La figure~\ref{fig:science_infuse} illustre le dispositif mis en place sur le st
 
 La passation s'est déroulée sur trois jours, chaque session durant environ dix minutes. Cinquante-sept sessions ont été enregistrées, dont huit ont été exclues, certaines en raison d'interruptions techniques et d'autres parce que le participant dépassait la tranche d'âge visée, portant l'échantillon final à 49 participants : 26 en condition C0 et 23 en condition C1 (la condition C2 n'a pas été testée lors de cette passation pilote). La population était composée d'enfants âgés de 5 à 15 ans. Les données recueillies pour chaque session comprenaient les logs du terminal, enregistrés manuellement (le mécanisme de journalisation automatique décrit plus haut n'existait pas encore), la photo du dessin final uniquement (les photos prises à chaque tour de feedback n'étaient, elles, pas encore enregistrées), et des notes d'observation qualitative prises en direct par les expérimentateurs sur l'attitude du participant et ses interactions avec le robot et son entourage.
 
-La cotation des dessins a été réalisée par Marco Grandclaude et Claudie Cuveillier, en aveugle par rapport à la condition expérimentale : au moment de noter un dessin, les deux évaluateurs ignoraient s'il provenait de la condition C0 ou C1. La notation s'est faite à deux simultanément plutôt qu'indépendamment : pour chaque critère, chaque évaluateur annonce son score, et en cas de désaccord, les deux se concertent jusqu'à trouver un accord commun.
+Je me suis occupé de la cotation des dessins avec Claudie Cuveillier, en aveugle par rapport à la condition expérimentale : au moment de noter un dessin, les deux évaluateurs ignoraient s'il provenait de la condition C0 ou C1. La notation s'est faite à deux simultanément plutôt qu'indépendamment : pour chaque critère, chaque évaluateur annonce son score, et en cas de désaccord, les deux se concertent jusqu'à trouver un accord commun.
 
 \newpage
 
 % ============================================================
 \section{Résultats}
 
-\subsection{Déroulement illustré de l'expérience}
+\subsection{Déroulement illustré de l'expérience (en condition C1)}
 
-En complément de la description technique des sept phases de l'expérience (section~\ref{sec:protocole}, figure~\ref{fig:session}), la figure~\ref{fig:bd_experience} illustre, sous forme de bande dessinée, le déroulement concret d'une session pour un participant fictif, en condition C1. Le cycle \texttt{DRAWING}/\texttt{FEEDBACK} se répète jusqu'à trois fois avant la phase \texttt{TITLE}, chaque tour de dessin étant suivi d'un échange sur le dessin en cours.
+En complément de la description technique des sept phases de l'expérience (section~\ref{sec:protocole}, figure~\ref{fig:session}), la figure~\ref{fig:bd_experience} illustre, sous forme de bande dessinée, le déroulement concret d'une session pour un participant fictif, en condition C1.
 
-\newcommand{\bdcase}[2]{%
+\newcommand{\bdcase}[3]{%
     \begin{minipage}[b]{#1}
         \centering
-        \includegraphics[width=\textwidth]{#2}
+        \includegraphics[width=\textwidth]{#2}\\[0.5mm]
+        {\footnotesize #3}
     \end{minipage}%
 }
 
 \begin{figure}[H]
     \centering
 
-    \bdcase{0.49\textwidth}{figures/bd_intro.png}%
-    \hspace{1mm}%
-    \bdcase{0.49\textwidth}{figures/bd_ice_breaking.png}
+    \bdcase{0.48\textwidth}{figures/bd_intro.png}{Le robot se présente.}%
+    \hspace{2mm}%
+    \bdcase{0.48\textwidth}{figures/bd_ice_breaking.png}{Échange informel.}
 
-    \vspace{2mm}
+    \vspace{4mm}
 
-    \bdcase{0.49\textwidth}{figures/bd_task_intro.png}%
-    \hspace{1mm}%
-    \bdcase{0.49\textwidth}{figures/bd_drawing.png}
+    \bdcase{0.48\textwidth}{figures/bd_task_intro.png}{Le robot explique la consigne.}
 
-    \vspace{2mm}
-
-    \begin{tikzpicture}
-        \draw[->, thick] (0.5,0.4) arc[start angle=20, end angle=340, radius=0.42cm];
-        \node at (0.15,0.4) {\footnotesize $\times 3$};
-    \end{tikzpicture}
-
-    \vspace{2mm}
-
-    \bdcase{0.49\textwidth}{figures/bd_feedback.png}%
-    \hspace{1mm}%
-    \bdcase{0.49\textwidth}{figures/bd_title.png}
-
-    \vspace{2mm}
-
-    \bdcase{0.49\textwidth}{figures/bd_ending.png}
-
-    \caption{Déroulement illustré d'une session type, en condition C1 (\texttt{INTRO}, \texttt{ICE\_BREAKING}, \texttt{TASK\_INTRO}, puis le cycle \texttt{DRAWING}/\texttt{FEEDBACK} répété jusqu'à trois fois, \texttt{TITLE} et \texttt{ENDING}).}
+    \caption{Déroulement illustré d'une session type en condition C1 (1/2).}
     \label{fig:bd_experience}
 \end{figure}
 
-\subsection{Évolution du dessin en cours de session}
+\newpage
 
-Les figures~\ref{fig:evolution_c1} et~\ref{fig:evolution_c2} montrent, pour une session C1 et une session C2, l'évolution du même dessin au fil des trois tours, chaque photo correspondant au moment où \texttt{vision\_node} capture la feuille (fin de tour 1, fin de tour 2, puis la photo finale de la phase \texttt{TITLE}). Cette progression n'est pas montrée pour la condition C0 : les feedbacks y étant génériques et non liés au contenu du dessin, seule la photo finale était enregistrée pour cette condition lors de cette passation pilote.
+\begin{figure}[H]
+    \ContinuedFloat
+    \centering
+
+    \begin{tikzpicture}
+        \node[inner sep=0] (bddrawing) {\includegraphics[width=0.48\textwidth]{figures/bd_drawing.png}};
+        \node[inner sep=0, right=2mm of bddrawing] (bdfeedback) {\includegraphics[width=0.48\textwidth]{figures/bd_feedback.png}};
+        \coordinate (darr) at ($(bddrawing.north)+(0,4mm)$);
+        \coordinate (farr) at ($(bdfeedback.north)+(0,4mm)$);
+        \draw[->, thick] (farr) to[bend right=25] node[midway, above, font=\footnotesize] {répété $\times 2$} (darr);
+        \node[below=0.5mm of bddrawing, align=center, font=\footnotesize, text width=0.48\textwidth] {Le participant dessine.};
+        \node[below=0.5mm of bdfeedback, align=center, font=\footnotesize, text width=0.48\textwidth] {Le robot commente le dessin (C1).};
+    \end{tikzpicture}
+
+    \vspace{4mm}
+
+    \bdcase{0.48\textwidth}{figures/bd_title.png}{Le robot propose un titre.}%
+    \hspace{2mm}%
+    \bdcase{0.48\textwidth}{figures/bd_ending.png}{Fin de la session.}
+
+    \caption{Déroulement illustré d'une session type en condition C1 (2/2).}
+\end{figure}
+
+\subsection{Évolution du dessin en cours de session}
+\label{sec:evolution_dessin}
+
+Les figures~\ref{fig:evolution_c1} et~\ref{fig:evolution_c2} montrent, pour une session C1 et une session C2, l'évolution du même dessin au fil des trois tours, chaque photo correspondant au moment où \texttt{vision\_node} capture la feuille (fin de tour 1, fin de tour 2, puis la photo finale de la phase \texttt{TITLE}). Cette progression n'est pas montrée pour la condition C0, pour laquelle aucune photo intermédiaire n'existe.
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.32\textwidth]{figures/evolution_c1_tour1.jpg}\hfill
-    \includegraphics[width=0.32\textwidth]{figures/evolution_c1_tour2.jpg}\hfill
-    \includegraphics[width=0.32\textwidth]{figures/evolution_c1_tour3.jpg}
-    \caption{Évolution d'un dessin sur les trois tours, en condition C1 (de gauche à droite : fin de tour 1, fin de tour 2, dessin final).}
+    \begin{subfigure}[b]{0.32\textwidth}
+        \includegraphics[width=\textwidth]{figures/evolution_c1_tour1.jpg}
+        \caption{Fin de tour 1}
+    \end{subfigure}\hfill
+    \begin{subfigure}[b]{0.32\textwidth}
+        \includegraphics[width=\textwidth]{figures/evolution_c1_tour2.jpg}
+        \caption{Fin de tour 2}
+    \end{subfigure}\hfill
+    \begin{subfigure}[b]{0.32\textwidth}
+        \includegraphics[width=\textwidth]{figures/evolution_c1_tour3.jpg}
+        \caption{Dessin final}
+    \end{subfigure}
+    \caption{Évolution d'un dessin sur les trois tours, en condition C1.}
     \label{fig:evolution_c1}
 \end{figure}
 
-En condition C2, le dessin réel du participant (figure~\ref{fig:evolution_c2}) est accompagné à chaque tour d'une proposition visuelle générée par gpt-image-1.5 à partir de ce même dessin (figure~\ref{fig:evolution_c2_genere}), que le participant peut ensuite choisir de reprendre ou d'ignorer au tour suivant.
+Les logs de cette session (annexe~\ref{annexe:log_c1}) donnent un aperçu concret de la proximité entre ce que dit le robot et ce que le participant ajoute au dessin juste après ; la portée de ce lien est discutée plus largement en section~\ref{sec:influence_suggestions}. Après le tour 1, le robot demande « Que veux-tu transmettre avec ces personnages et ce bateau ? », puis suggère « d'ajouter un élément qui montre ce qui se passe sur ou autour de l'eau » ; la photo de fin de tour 2 montre effectivement l'ajout d'une créature au-dessus de la scène et de vagues autour du bateau. Après le tour 2, le robot relance sur l'interaction entre les personnages (« Que pourrait faire l'un des personnages pour réagir à ce mouvement ? ») ; le participant répond qu'ils « peuvent se battre » et précise l'histoire (dragon, bateaux, bagarre), que l'on retrouve dans le dessin final ainsi que dans le titre proposé par le robot en fin de session, « Bataille sur l'eau ». Ces deux relances portent d'ailleurs sur des dimensions notées par la grille TCT-DP (tableau~\ref{tab:tct_dp_criteres}) : l'ajout d'un élément nouveau (critère Ne) et la cohérence thématique entre les éléments du dessin (critère Cth).
+
+En condition C2, le dessin réel du participant (figure~\ref{fig:evolution_c2}) est accompagné à chaque tour d'une proposition visuelle générée par gpt-image-1.5 à partir de ce même dessin (figure~\ref{fig:evolution_c2_genere}), que le participant est ensuite libre de reprendre (en tout ou en partie) ou d'ignorer au tour suivant.
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.32\textwidth]{figures/evolution_c2_tour1.jpg}\hfill
-    \includegraphics[width=0.32\textwidth]{figures/evolution_c2_tour2.jpg}\hfill
-    \includegraphics[width=0.32\textwidth]{figures/evolution_c2_tour3.jpg}
+    \begin{subfigure}[b]{0.32\textwidth}
+        \includegraphics[width=\textwidth]{figures/evolution_c2_tour1.jpg}
+        \caption{Fin de tour 1}
+    \end{subfigure}\hfill
+    \begin{subfigure}[b]{0.32\textwidth}
+        \includegraphics[width=\textwidth]{figures/evolution_c2_tour2.jpg}
+        \caption{Fin de tour 2}
+    \end{subfigure}\hfill
+    \begin{subfigure}[b]{0.32\textwidth}
+        \includegraphics[width=\textwidth]{figures/evolution_c2_tour3.jpg}
+        \caption{Dessin final}
+    \end{subfigure}
     \caption{Évolution du dessin réel du participant sur les trois tours, en condition C2.}
     \label{fig:evolution_c2}
 \end{figure}
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.48\textwidth]{figures/evolution_c2_genere1.jpg}\hfill
-    \includegraphics[width=0.48\textwidth]{figures/evolution_c2_genere2.jpg}
-    \caption{Propositions visuelles générées par gpt-image-1.5 à partir du dessin, après le tour 1 (gauche) et le tour 2 (droite), pour la même session C2.}
+    \begin{subfigure}[b]{0.48\textwidth}
+        \includegraphics[width=\textwidth]{figures/evolution_c2_genere1.jpg}
+        \caption{Après le tour 1}
+    \end{subfigure}\hfill
+    \begin{subfigure}[b]{0.48\textwidth}
+        \includegraphics[width=\textwidth]{figures/evolution_c2_genere2.jpg}
+        \caption{Après le tour 2}
+    \end{subfigure}
+    \caption{Propositions visuelles générées par gpt-image-1.5, pour la même session C2.}
     \label{fig:evolution_c2_genere}
 \end{figure}
 
+On peut de la même façon comparer chaque proposition générée à ce que le participant en reprend, ou non, au tour suivant.
+
+À la fin du tour 1, gpt-image-1.5 génère une première proposition à partir du dessin en cours : elle transforme la forme sombre en tête d'un personnage posé sur un corps cubique, avec des bras et des jambes, et ajoute un soleil ainsi qu'un pot de fleurs (figure~\ref{fig:evolution_c2_genere}a).
+Les logs de cette session (annexe~\ref{annexe:log_c2}) montrent la réaction du participant à cette proposition, dite à lui-même et non au robot : « Ok, j'aime bien ça. », puis « C'est un cube en plus. » ; il commente ici l'idée générale du bonhomme proposée par gpt-image-1.5, avant de reprendre son dessin.
+Sur la photo de fin de tour 2, ni la forme sombre ni le cube d'origine ne sont modifiés : les deux fragments restent exactement comme au tour précédent.
+Le participant dessine à la place une nouvelle tête ronde et sombre ainsi qu'un nouveau cube pour lui servir de corps, reprenant ainsi le principe tête sombre sur corps cubique de la proposition sans toucher aux fragments d'origine ; le soleil et le pot de fleurs, eux, ne sont pas repris.
+Il ajoute par ailleurs, de lui-même, un nouvel oiseau coiffé d'un chapeau.
+
+À la fin du tour 2, une seconde proposition est générée à partir de ce nouveau dessin : elle reprend l'oiseau dessiné par le participant et lui ajoute une couronne, et complète la scène d'une soucoupe volante placée hors du cadre carré ainsi que d'un pot de fleurs (figure~\ref{fig:evolution_c2_genere}b).
+Le positionnement hors cadre de la soucoupe n'est pas anodin, puisque tout débordement hors du cadre est lui-même un critère noté par la grille TCT-DP (critère Bfi, tableau~\ref{tab:tct_dp_criteres}).
+Aucun de ces trois éléments (couronne, soucoupe, pot de fleurs) ne se retrouve dans le dessin final : le participant part plutôt dans sa propre direction, en dessinant une nouvelle spirale à côté de la spirale d'origine (restée inchangée) pour former un escargot, et en ajoutant une créature inédite en dehors du cadre.
+
 \subsection{Exemple de cotation TCT-DP}
-% TODO : reprendre un dessin réel C0 et un dessin réel C1 (déjà notés par
-% Marco Grandclaude et Claudie Cuveillier lors de la passation Science Infuse)
-% et présenter leur cotation critère par critère (grille tableau~\ref{tab:tct_dp_criteres})
-% à côté de la photo du dessin, pour illustrer concrètement comment les scores
-% comparés en~\ref{sec:} (étude exploratoire) sont obtenus.
+\label{sec:cotation_exemple}
+
+Le figure~\ref{fig:cotation_exemple} montre deux dessins réels que j'ai notés avec Claudie Cuveillier selon la grille du tableau~\ref{tab:tct_dp_criteres} (section~\ref{sec:protocole}) :
+un dessin en condition C0 et le dessin final de la session C1 déjà présentée en figure~\ref{fig:evolution_c1}.
+Le tableau~\ref{tab:cotation_exemple} donne le détail de leur cotation, critère par critère.
+
+\begin{figure}[H]
+    \centering
+    \begin{subfigure}[b]{0.48\textwidth}
+        \includegraphics[width=\textwidth]{figures/cotation_C0.jpeg}
+        \caption{Dessin noté, condition C0}
+    \end{subfigure}\hfill
+    \begin{subfigure}[b]{0.48\textwidth}
+        \includegraphics[width=\textwidth]{figures/evolution_c1_tour3.jpg}
+        \caption{Dessin noté, condition C1}
+    \end{subfigure}
+    \caption{Les deux dessins dont la cotation est détaillée dans le tableau~\ref{tab:cotation_exemple}.}
+    \label{fig:cotation_exemple}
+\end{figure}
+
+\begin{table}[H]
+    \centering
+    \begin{tabular}{@{}lcc@{}}
+        \toprule
+        \textbf{Critère} & \textbf{C0} & \textbf{C1} \\
+        \midrule
+        Cn (/6)    & 3  & 3  \\
+        Cm (/6)    & 3  & 3  \\
+        Ne (/6)    & 1  & 5  \\
+        Cl (/6)    & 0  & 0  \\
+        Cth (/6)   & 3  & 3  \\
+        Bfd (/3)   & 0  & 0  \\
+        Bfi (/3)   & 0  & 0  \\
+        Pe (/6)    & 0  & 2  \\
+        Hu (/3)    & 1  & 0  \\
+        Uc-b (/2)  & 0  & 0  \\
+        Uc-c (/2)  & 0  & 0  \\
+        Uc-d (/2)  & 0  & 1  \\
+        \midrule
+        \textbf{Total (/51)} & \textbf{11} & \textbf{17} \\
+        \bottomrule
+    \end{tabular}
+    \caption{Cotation détaillée des deux dessins de la figure~\ref{fig:cotation_exemple}.}
+    \label{tab:cotation_exemple}
+\end{table}
+
+Quelques exemples illustrent ces écarts.
+Sur le dessin C0, seul l'œil gauche est compté comme nouveau (Ne) : l'œil droit, le carré et la ligne ondulée du haut (qui forme une sorte de front) sont chacun des continuations et complétions de fragments existants (Cn et Cm), tandis que le trait en pointillés, le point isolé et le petit carré hors cadre restent des fragments de base non modifiés et ne comptent dans aucun des deux critères.
+Le point en Hu vient de l'expression du visage formée par les yeux, avec leurs trois points blancs, et la bouche.
+Sur le dessin C1, les cinq éléments comptés en Ne sont le dragon, l'un des deux bateaux, et les trois personnages, aucun n'étant construit à partir d'un fragment du TCT-DP.
+Le point en Uc-d récompense le dragon, un élément non conventionnel puisqu'aucun autre participant n'en a dessiné pendant la passation, contrairement au visage inscrit dans le cadre du dessin C0, une solution beaucoup plus courante.
+Les deux points en Pe viennent de l'effet de profondeur donné par les deux bateaux, dont l'un tire sur l'autre, par les personnages en train de se battre, et par le carré qui semble être devant l'un des personnages.
 
 \subsection{Étude exploratoire de la co-créativité}
-% Comparaison C0 vs C1 vs C2 — tests de Welch sur les critères TCT-DP.
-% Note : la condition C2 n'a pas encore été testée lors de la Semaine de la Science
-% Infuse ; son étude statistique approfondie est prévue lors de la passation principale
-% d'octobre/novembre 2026.
-% Tests de Welch C0 vs C1, analyse par tranche d'âge, analyse par critère.
-% Tableaux de moyennes et différences (Ne, Cl, Cn, Pe, Cm, Cth, Uc, Bfi…).
+\label{sec:etude_exploratoire}
+
+Le score total TCT-DP (somme des douze critères de la grille, tableau~\ref{tab:tct_dp_criteres}) est comparé entre les conditions C0 et C1 à l'aide d'un test t de Welch, plus robuste qu'un test t classique lorsque les variances des deux groupes ne sont pas supposées égales.
+La condition C2 n'est pas incluse dans cette comparaison, n'ayant pas été testée lors de cette passation pilote.
+
+La figure~\ref{fig:ttest} montre une différence nette entre les deux conditions : le score moyen atteint 21,5 en C1 contre 13,8 en C0, un écart statistiquement significatif (t de Welch $= -4{,}72$ ; $p < 0{,}0001$).
+Le d de Cohen obtenu ($1{,}34$) dépasse largement le seuil conventionnel de $0{,}8$ à partir duquel un effet est considéré comme grand, ce qui traduit un impact marqué et robuste de la condition sur la qualité créative du dessin produit.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.7\textwidth]{figures/ttest.png}
+    \caption{Comparaison du score TCT-DP total entre les conditions C0 et C1.}
+    \label{fig:ttest}
+\end{figure}
+
+Le détail par critère (figure~\ref{fig:cohens_d}) montre que cet écart ne se répartit pas uniformément sur les douze critères de la grille.
+Sept d'entre eux présentent une différence significative en faveur de C1 : Ne (nouveaux éléments), Uc-b, Uc-c et Uc-d (inconventionnalité), Pe (perspective), Cth (cohérence thématique) et Cn (continuations).
+Le critère Ne se démarque particulièrement (d $= 1{,}11$), ce qui rejoint l'exemple détaillé de cotation (section~\ref{sec:cotation_exemple}) : les nouveaux éléments comptaient pour l'essentiel de l'écart de score entre les deux dessins du tableau~\ref{tab:cotation_exemple}.
+Ce résultat va dans le sens d'une interaction avec le robot qui favoriserait l'ajout de nouveaux éléments au dessin, plutôt qu'un usage minimal des seuls fragments fournis.
+Les cinq critères restants (Cm, Cl, Bfi, Bfd, Hu) ne montrent pas de différence significative ; Hu est même, seul parmi les douze, légèrement en faveur de C0, sans que cet écart soit significatif.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.75\textwidth]{figures/criteres_cohens_d.png}
+    \caption{Taille d'effet (d de Cohen, C1 $-$ C0) par critère TCT-DP.}
+    \label{fig:cohens_d}
+\end{figure}
+
+Ces résultats rejoignent ce qui a été observé plus qualitativement en notant les dessins.
+En C0, les dessins avaient tendance à rester des compositions fermées et minimales : les fragments fournis étaient utilisés directement, mais peu développés ou intégrés à une histoire, et plusieurs participants semblaient hésiter sur la façon de poursuivre, ce qui se traduisait par des dessins incomplets ou par peu d'ajouts au-delà des formes de base.
+En C1, les dessins étaient au contraire plus riches et élaborés : les fragments étaient davantage reliés entre eux pour former une scène cohérente, avec l'ajout de nouveaux éléments à la composition.
+Les questions et suggestions du robot semblent ainsi avoir aidé les participants à trouver des idées et à rester engagés dans la tâche créative au fil des deux échanges de feedback, une hypothèse développée plus en détail en section~\ref{sec:influence_suggestions}.
+Associé à la taille d'effet importante obtenue sur le score total, ce constat va dans le sens d'un effet net et cohérent de la qualité du feedback sur la production créative.
 
 \subsection{Résultats techniques de validation du système}
-% Note : les tests de latence ci-dessous ont été réalisés sur une version
-% antérieure de l'architecture (STT et LLM partiellement sur le robot).
-% Une comparaison avant/après externalisation pourra être ajoutée.
+\label{sec:latence}
 
-\subsubsection{Tests de latence du LLM}
-% Tableaux : cold start vs warm start, effets de max\_tokens et temperature.
-% Warm-up : résolution du "cold start" (~6-7 s → ~1 s).
-%
-% Mesures de latence C2 (N=2–3, conditions réelles) :
-%
-%   Type                        N    Min      Max      Moyenne
-%   GPT-4o-mini vision          3    1.59 s   4.08 s   2.82 s
-%   GPT-4o-mini description C2  2    4.76 s   7.38 s   6.07 s
-%   gpt-image-1.5 génération     2   20.12 s  63.94 s  42.03 s
-%   C2 total                    2   24.88 s  71.33 s  ~48 s
-%
-% Observations :
-% - La variance de gpt-image-1.5 est très élevée (×3 entre min et max) ;
-%   le premier appel de session est systématiquement le plus lent (cold start).
-% - Après optimisation (suppression de l'appel GPT vision redondant en C2 feedback),
-%   le total descend à ~22–69 s (gain ~2.8 s par feedback).
-% - Les animations de réflexion du robot (3 phrases espacées de 15 s) masquent
-%   l'attente jusqu'à ~35 s ; au-delà, la latence reste perceptible.
+Les latences présentées ci-dessous sont mesurées à partir des lignes \texttt{[LATENCE]} que \texttt{brain\_node} et \texttt{stt\_node} affichent dans la console ROS2 pendant l'exécution : chaque appel (transcription, analyse du dessin, génération de texte ou d'image) y est chronométré et sa durée affichée. Ces lignes ne sont pas sauvegardées dans les fichiers de session (voir la partie portant sur la journalisation) ; elles ont été relevées directement dans le terminal lors de sessions réelles.
+Le nombre de mesures reste faible pour chaque catégorie (2 à 15 selon les cas) : les moyennes ci-dessous donnent donc un ordre de grandeur utile, mais restent sensibles à une seule valeur extrême et ne permettent pas de tirer de conclusion statistiquement solide.
 
-\subsubsection{Tests de latence du STT}
-% Google Cloud STT : ~0.9 s stable, peu sensible à la longueur de la phrase.
-% pause\_threshold = 0.6 s à ajouter à la latence totale.
+En condition C1, l'essentiel du temps de traitement vient de l'échange avec le participant : transcription de sa voix, analyse du dessin et génération de la réponse par GPT-4o-mini.
+Ces mesures ont d'abord été prises avec Faster-Whisper tournant sur CPU ; il a ensuite été exécuté sur GPU, ce qui réduit fortement la latence de transcription, de 2,34\,s à 0,24\,s en moyenne, soit une division par environ dix (tableau~\ref{tab:latence_whisper_gpu}).
 
-\subsubsection{Latence totale perçue : tableau récapitulatif}
-% STT (~0.9 s) + bridge (~0.1 ms) + LLM (0.69–1.95 s) + pause = ~2.7 s moy.
+\begin{table}[H]
+    \centering
+    \begin{tabular}{@{}lccccc@{}}
+        \toprule
+        \textbf{Type} & \textbf{N} & \textbf{Min} & \textbf{Max} & \textbf{Moyenne} & \textbf{Écart-type} \\
+        \midrule
+        Whisper (STT), CPU & 15 & 0,63\,s & 5,43\,s & 2,34\,s & $\sim$1,40\,s \\
+        Whisper (STT), GPU & 9  & 0,07\,s & 0,70\,s & 0,24\,s & $\sim$0,20\,s \\
+        \bottomrule
+    \end{tabular}
+    \caption{Latence de transcription (CPU/GPU).}
+    \label{tab:latence_whisper_gpu}
+\end{table}
 
-\subsubsection{Tests de cohérence temporelle}
-% Correctif dynamique : soustraction du temps de chargement de l'émotion
-% à la durée d'animation de la bouche.
+L'analyse du dessin et la génération de la réponse se font chacune via un appel distinct à GPT-4o-mini : \emph{GPT vision} analyse la photo du dessin (ce qui a été ajouté ou modifié depuis la dernière capture) ; l'autre appel, noté ici \emph{GPT texte}, génère ce que dit le robot pendant l'échange, aussi bien sa première question ouverte juste après l'analyse que ses relances à chaque réponse du participant. Dans le code, ces deux derniers cas sont traités par deux fonctions différentes, mais il s'agit bien du même type d'appel : une simple requête à GPT-4o-mini.
+Le tableau~\ref{tab:latence_c1} rassemble l'ensemble de ces latences, avec la version GPU de la transcription.
 
-\subsubsection{Tests de mémoire et d'historique}
-% HISTORY\_LIMIT = 5 : impact sur latence négligeable (à confirmer si +).
+\begin{table}[H]
+    \centering
+    \begin{tabular}{@{}lccccc@{}}
+        \toprule
+        \textbf{Type} & \textbf{N} & \textbf{Min} & \textbf{Max} & \textbf{Moyenne} & \textbf{Écart-type} \\
+        \midrule
+        Whisper (STT), sur GPU      & 9 & 0,07\,s & 0,70\,s & 0,24\,s & $\sim$0,20\,s \\
+        GPT vision                  & 3 & 1,33\,s & 4,71\,s & 3,25\,s & $\sim$1,74\,s \\
+        GPT texte                  & 5 & 0,75\,s & 1,67\,s & 1,30\,s & $\sim$0,35\,s \\
+        \bottomrule
+    \end{tabular}
+    \caption{Latences mesurées en condition C1, sur une session type.}
+    \label{tab:latence_c1}
+\end{table}
+
+Le temps perçu par le participant, entre le moment où il finit de parler et le moment où le robot commence à répondre, ne se résume pas à la seule transcription et à la réponse du LLM : \texttt{stt\_node} attend 0,9\,s sans nouvelle parole avant de considérer la phrase comme terminée et de la transcrire.
+En reprenant les moyennes ci-dessus (Whisper sur GPU et GPT texte), ce temps perçu est donc en moyenne d'environ 0,9\,s + 0,24\,s + 1,30\,s, soit un peu plus de 2,4\,s.
+
+En condition C2, la génération d'image par gpt-image-1.5 est de loin l'étape la plus longue (tableau~\ref{tab:latence_c2}).
+Ces mesures ont été prises avant l'implémentation de l'appel de chauffe : sur cette session, le premier appel à gpt-image-1.5 a mis 63,94\,s (premier appel de la session, donc à froid), contre 20,12\,s pour le second appel, déjà « chauffé » par le premier.
+La moyenne de 42,03\,s reflète donc surtout ce coût initial du premier appel à froid ; une fois l'appel de chauffe en place au démarrage de la session, la latence réellement perçue par le participant devrait plutôt se rapprocher de celle du second appel, de l'ordre de 20 à 30\,s.
+Même ainsi, cette attente reste longue pour le participant : c'est pour cette raison que le robot enchaîne, pendant la génération de l'image, des gestes et des phrases de réflexion tirées aléatoirement toutes les 15 secondes (« Je cherche une idée... », « Encore un petit instant, je peaufine les détails... »), pour maintenir son attention en attendant le résultat.
+
+\begin{table}[H]
+    \centering
+    \begin{tabular}{@{}lcccc@{}}
+        \toprule
+        \textbf{Type} & \textbf{N} & \textbf{Min} & \textbf{Max} & \textbf{Moyenne} \\
+        \midrule
+        GPT vision                    & 3 & 1,59\,s  & 4,08\,s  & 2,82\,s \\
+        GPT-4o-mini description (C2)  & 2 & 4,76\,s  & 7,38\,s  & 6,07\,s \\
+        gpt-image-1.5, génération     & 2 & 20,12\,s & 63,94\,s & 42,03\,s \\
+        \midrule
+        \textbf{C2, total} & 2 & 24,88\,s & 71,33\,s & $\sim$48\,s \\
+        \bottomrule
+    \end{tabular}
+    \caption{Latences mesurées en condition C2, sur une session type.}
+    \label{tab:latence_c2}
+\end{table}
 
 \newpage
 
 % ============================================================
 \section{Discussion}
 
-\subsection{Interprétation des résultats statistiques et limites de l'étude exploratoire}
+Le score total de créativité obtenu en C1 (21,5 en moyenne) est nettement supérieur à celui de C0 (13,8), avec une taille d'effet importante ($d = 1{,}34$).
+
+\subsection{Interprétation du résultat : influence perçue des suggestions du robot}
+\label{sec:influence_suggestions}
+
+Un score plus élevé en C1 ne veut pas forcément dire que le robot a stimulé la créativité du participant : un constat revient en effet de façon récurrente, à la fois dans les logs de session et dans les observations de terrain recueillies pendant la passation pilote, les participants s'écartant rarement de la direction donnée par les suggestions de QT en condition C1.
+Ces suggestions restent elles-mêmes volontairement ouvertes : le prompt de C1 (annexe~\ref{annexe:prompt_c1}) autorise le robot à orienter vers une catégorie d'élément (« un animal », par exemple), mais jamais vers quelque chose de précis (pas « une étoile » ni « un chien »).
+Le contenu concret qu'un participant ajoute à son dessin reste donc bien le sien ; c'est surtout le thème ou la direction de cet ajout qui semble venir du robot plutôt que d'une initiative spontanée.
+Cela nuance l'idée d'une simple exécution de consignes : même sous une forme ouverte, la suggestion de QT semble suffire à orienter la suite du dessin dans une direction donnée, plutôt que d'être librement réinterprétée ou ignorée.
+
+L'échange reste par ailleurs largement asymétrique : l'initiative du dialogue revient presque systématiquement à QT, les participants répondant à ses sollicitations mais s'adressant très rarement à lui de façon spontanée.
+
+Un dernier indice va dans le même sens : le petit carré placé hors du cadre, l'un des fragments de base du TCT-DP, a été peu utilisé spontanément, et plus largement les dessins débordent rarement du cadre proposé ; lorsque cela arrivait, c'était d'ailleurs de l'initiative propre du participant, sans lien avec une suggestion du robot.
+Cela recoupe l'absence d'effet significatif des critères Bfd et Bfi : malgré la présence du hors-cadre parmi les guidages proposés à QT, la condition C1 ne semble pas avoir suffi à faire sortir davantage les participants du cadre donné.
+
+Trancher si ce comportement traduit une créativité authentiquement stimulée par le robot ou une forme de conformité aux suggestions reçues dépasse le cadre technique de ce rapport.
+Une partie de l'écart de score pourrait néanmoins simplement venir du fait que c'est le robot qui pousse le participant à ajouter quelque chose dans une direction donnée, plutôt que d'une idée que le participant aurait eue spontanément.
+
+Ce résultat s'inscrit malgré tout dans la question de recherche du projet : au-delà de savoir si l'effet mesuré relève d'une conformité aux suggestions ou d'une créativité plus autonome, il montre qu'un robot capable d'analyser un dessin en temps réel et d'y répondre de façon contextualisée peut avoir un effet mesurable sur la production, là où un feedback générique n'y parvient pas.
+Cela va dans le sens du scénario de collaboration humain-IA que CreaRobot cherche à mettre en pratique : un robot qui facilite la créativité plutôt qu'il ne s'y substitue, l'humain restant décisionnaire de ce qu'il retient ou non des suggestions reçues.
+
+\subsection{Limites statistiques de l'étude exploratoire}
 \label{sec:limites}
-% Portée limitée de l'étude exploratoire : effectif réduit lors de la Science Infuse,
-% condition C2 non testée à ce stade (étude approfondie prévue en octobre/novembre 2026).
 
-\subsection{Observation comportementale : influence perçue des suggestions du robot}
-% Tendance observée des participants à se sentir obligés de suivre les suggestions
-% de QT en condition C1, et à recopier ces idées lors du passage en condition C2.
-% Présenté ici comme un constat descriptif ; l'analyse théorique de ce phénomène
-% (créativité authentique, autorité perçue du robot) dépasse le cadre technique de
-% ce rapport.
+Plusieurs éléments méthodologiques invitent à nuancer la portée du résultat présenté plus haut.
 
-\subsection{Limites techniques et méthodologiques}
-% Ce qui a posé problème lors de la Science Infuse et ce qu'il faut corriger pour
-% la passation principale d'octobre/novembre (architecture, protocole, capteurs, prompts…).
+Les participants (26 en C0, 23 en C1) étaient recrutés de passage à la Cité des Sciences plutôt que spécifiquement pour l'étude.
+L'affectation aux conditions s'est faite par alternance plutôt que par randomisation, sur une population aux profils hétérogènes dont l'âge n'a pu être estimé que visuellement : rien ne garantit donc que les deux groupes C0 et C1 soient comparables sur d'autres critères que la condition elle-même, par exemple l'âge, et qu'une partie de l'écart de score observé ne s'explique pas plutôt par ce type de différence entre les deux groupes que par la condition.
+La cotation elle-même comporte une part d'interprétation, en particulier sur des critères comme Uc-b (élément surréaliste) : juger si un élément relève ou non du surréalisme reste plus sujet à interprétation que, par exemple, repérer si un élément est nouveau (par rapport au fragments de base du TCT-DP) ou n'a jamais été observé dans les autres dessins (Ne, Uc-d).
+Elle a été réalisée à deux, après harmonisation préalable des critères entre les deux personnes ayant noté les dessins, mais sans calcul formel d'accord inter-juges, ce qui limite l'appréciation de sa fiabilité.
+
+Ces réserves méthodologiques ne remettent pas en cause l'intérêt pratique du résultat, l'interaction avec le robot ayant bien eu un effet mesurable sur la production, mais elles invitent à réserver une interprétation plus forte de ce résultat aux passations plus contrôlées prévues pour la suite du projet.
+
+\subsection{Limites techniques et organisationnelles}
+\label{sec:limites_techniques}
+
+Plusieurs difficultés techniques et organisationnelles observées pendant la passation pilote restent à corriger avant la passation principale.
+
+Le bruit ambiant de la Cité des Sciences a été la principale source de perturbation, et variait en intensité au fil de la journée : la reconnaissance vocale, déjà construite sur des modèles Faster-Whisper relativement légers (\texttt{small}/\texttt{base}), s'est trouvée régulièrement mise en défaut dans cet environnement bruyant, entraînant des incompréhensions qui ont dégradé la qualité de certains échanges et nécessitant d'ajuster manuellement, à plusieurs reprises au cours des sessions, le volume du microphone ainsi que celui de la voix de QT.
+La passation principale, prévue dans une pièce fermée avec seulement le participant et le robot, ne devrait plus rencontrer ce problème.
+La latence des réponses de QT a par ailleurs été suffisamment perceptible pour que l'interaction ne soit pas toujours ressentie comme fluide ; cette latence a depuis été réduite.
+
+Sur le plan matériel, une coupure internet complète a par ailleurs interrompu une session en cours, le système reposant entièrement sur des appels à des API distantes (OpenAI).
+Encore côté audio, la phrase de relance utilisée en cas de silence prolongé (\texttt{FOLLOW\_UP\_QUESTION}, « Que penses-tu de ce que j'ai dit ? ») est fixe et s'est révélée trop répétitive à l'usage, contrairement aux phrases de réflexion de C2 qui, elles, sont tirées aléatoirement dans un petit pool (\texttt{C2\_PHRASES\_THINKING}) ; il serait utile que la personne qui reprend le projet pour la passation principale y ajoute, de la même façon, un petit pool de plusieurs formulations.
+
+Les commandes manuelles depuis le terminal (\texttt{fini}, \texttt{skip}, \texttt{terminate}, \texttt{title}) se sont par ailleurs révélées utiles à plusieurs reprises pendant les passations, pour faire avancer une session bloquée.
+
+Le système ne dispose par ailleurs d'aucune véritable annulation d'écho acoustique (AEC) : c'est le verrouillage demi-duplex, qui coupe le micro pendant que le robot parle, qui évite que \texttt{stt\_node} ne capte et ne retranscrive la voix de QT, plutôt qu'un traitement du signal capable de distinguer les deux voix en simultané. Cette solution s'est révélée robuste en pratique, mais elle ne permet pas au participant d'interrompre le robot pendant qu'il parle, contrairement à ce que permettrait une véritable AEC.
+La détection de fin de dessin par frame differencing ne comprend pas non plus vraiment le dessin : elle réagit seulement à l'absence de mouvement détecté par la caméra, pas à l'achèvement réel du dessin. Un participant qui s'arrête simplement pour réfléchir peut donc déclencher une fin de phase prématurée, tandis qu'un mouvement parasite dans le champ de la caméra peut à l'inverse retarder la détection.
+
+Enfin, une majorité de participants n'a pas respecté la séparation entre phases de dessin et phases d'interaction, dessinant pendant que le robot parlait sans lui répondre.
+Ce comportement s'est révélé plus marqué chez les jeunes enfants, pour lesquels le protocole, conçu à l'origine pour de jeunes adultes, s'est avéré trop complexe (compréhension des consignes, expression orale, dessin) ; un âge minimum de dix ans a été fixé après une demi-journée de passations.
+Même après ce seuil, la population de cette passation pilote restait majoritairement composée d'enfants, sans adolescents, ce qui laisse ouverte la question de savoir si l'effet mesuré se généralise à une population adulte, celle pour laquelle le protocole a initialement été conçu.
+La présence des parents, fréquente dans ce contexte de démonstration publique et non régulée par le protocole, a par ailleurs pu influencer certaines réponses ou certains choix de dessin ; ce facteur, comme la présence de l'animateur à proximité, n'est pas contrôlé dans cette étude exploratoire.
 
 \subsection{Perspectives}
-% Passation exploratoire réalisée en avril 2026 (Science Infuse) ; passation principale
-% prévue en octobre/novembre 2026, à laquelle Marco ne participera pas.
-% Mise en œuvre des améliorations identifiées ci-dessus pour cette passation d'octobre/novembre 2026,
-% qui permettra notamment d'étudier en profondeur la condition C2.
+\label{sec:perspectives}
+
+La passation exploratoire présentée dans ce rapport s'est déroulée en avril 2026, à l'occasion de la Semaine de la Science Infuse (section~\ref{sec:scienceinfuse}).
+Une passation principale est prévue en octobre ou novembre 2026, cette fois dans des conditions plus contrôlées et avec la population cible ; elle permettra notamment d'étudier en profondeur la condition C2, non incluse dans la comparaison statistique de ce rapport, en la comparant plus directement à C1 : d'un côté un feedback verbal, conçu pour rester ouvert et dont les participants s'écartent malgré tout rarement ; de l'autre une suggestion visuelle projetée. Cette comparaison permettra de mieux cerner quelle modalité d'intervention robotique soutient le mieux la production créative.
+Ce stage étant terminé, cette seconde passation sera reprise par une autre personne.
+
+Le prompt de C2 n'a pour l'instant été testé que sur un nombre restreint de sessions, et pas encore avec la population cible ; la proposition de dessin généré mériterait sans doute d'être retravaillée sur ce point, ce qui constitue un axe de travail possible pour qui souhaiterait s'investir spécifiquement sur le prompt engineering de ce volet du système.
+Toujours côté prompt, allonger légèrement la phase d'« ice breaker », voire confier à QT une partie de la présentation du protocole, pourrait contribuer à l'installer plus tôt comme interlocuteur principal de la session.
+
+\newpage
+\section{Conclusion}
+
+Ce stage a consisté à concevoir et développer de A à Z le système logiciel de CreaRobot : une architecture répartie entre le robot QTRobot (ROS\,1) et un PC externe (ROS\,2), intégrant reconnaissance vocale, analyse visuelle du dessin, génération de texte et d'image par LLM, et pilotage synchronisé des trois conditions expérimentales C0, C1 et C2.
+
+La passation pilote menée à la Cité des Sciences a permis de valider ce système en conditions réelles, malgré un contexte de démonstration publique peu propice à un contrôle expérimental strict.
+Les résultats de cette étude exploratoire vont dans le sens de l'hypothèse de départ : la condition C1, où le robot analyse le dessin du participant et y répond de façon contextualisée, produit des dessins significativement plus riches que la condition de contrôle, avec un effet large.
+Les observations comportementales et les limites méthodologiques discutées plus haut invitent cependant à rester prudent sur l'interprétation de ce résultat, qui reste à confirmer dans des conditions plus contrôlées.
+
+Ce travail a été mené en collaboration avec Claudie Cuveillier, stagiaire en ergonomie sur le même projet, dont les observations de terrain ont directement nourri ce rapport.
+Une passation principale est prévue en octobre/novembre 2026, qui reprendra le système et le protocole présentés ici pour les tester dans des conditions plus proches de celles visées par le projet, avec la condition C2 cette fois pleinement intégrée à l'étude.
 
 \newpage
 \bibliographystyle{plain}
@@ -720,14 +922,15 @@ En condition C2, le dessin réel du participant (figure~\ref{fig:evolution_c2}) 
 % ============================================================
 \appendix
 \section{Annexes}
-% À compléter.
 
-\subsection{Banque de phrases de feedback (condition C0)}
+\subsection{Prompts et phrases scriptées du système}
+
+\subsubsection{Banque de phrases de feedback (condition C0)}
 \label{annexe:feedback_c0}
 
 Phrases utilisées par le robot en condition C0 (\texttt{FEEDBACK\_C0\_1} et \texttt{FEEDBACK\_C0\_2}, \texttt{config.py}), une par tour, tirée aléatoirement dans la liste correspondante.
 
-\textbf{Premier tour}
+\textbf{Premier tour (\texttt{FEEDBACK\_C0\_1})}
 \begin{itemize}[noitemsep]
     \item « Oh, laisse-moi regarder ton dessin… Ah oui ! C'est vraiment intéressant, j'aime beaucoup ce que tu as fait ! J'ai hate de voir ce que tu vas rajouter. »
     \item « Je peux voir où tu en es ? … Oh ! Dis donc… j'aime bien ce que tu crées. »
@@ -741,7 +944,7 @@ Phrases utilisées par le robot en condition C0 (\texttt{FEEDBACK\_C0\_1} et \te
     \item « Laisse-moi voir… Ah ! Oui, j'aime ça ! Ça me plaît vraiment ce que tu as créé. »
 \end{itemize}
 
-\textbf{Deuxième tour}
+\textbf{Deuxième tour (\texttt{FEEDBACK\_C0\_2})}
 \begin{itemize}[noitemsep]
     \item « Oh, tu as bien avancé depuis tout à l'heure ! … J'aime vraiment ce que tu as rajouté, c'est bien ! »
     \item « Voyons voir… oh mais dis donc ! Ça a bien évolué ! J'aime beaucoup ce que tu as fait. »
@@ -755,7 +958,7 @@ Phrases utilisées par le robot en condition C0 (\texttt{FEEDBACK\_C0\_1} et \te
     \item « Ah, montre-moi où tu en es… oh ! Dis donc, tu as bien avancé ! C'est vraiment sympa tout ça. »
 \end{itemize}
 
-\subsection{Prompt complet de la condition C1}
+\subsubsection{Prompt complet de la condition C1}
 \label{annexe:prompt_c1}
 
 Prompt système du robot en condition C1 (\texttt{PROMPT\_C1}, \texttt{config.py}) :
@@ -838,7 +1041,7 @@ Contraintes finales
 La discussion dure 2 échanges. Ta première action est une question. Ta deuxième action est une suggestion légère.
 \end{quote}
 
-\subsection{Prompt d'analyse de l'intention en condition C2}
+\subsubsection{Prompt d'analyse en condition C2}
 \label{annexe:prompt_c2_analysis}
 
 Prompt système utilisé pour produire la description d'intention qui alimente le prompt suivant (\texttt{PROMPT\_C2\_ANALYSIS}, \texttt{config.py}) :
@@ -847,22 +1050,214 @@ Prompt système utilisé pour produire la description d'intention qui alimente l
 En 2-3 phrases maximum, decris l'INTENTION du participant : ce qu'il a voulu representer et comment il a utilise les formes du test. Concentre-toi sur le sens (ex : 'le carre est utilise comme tete d'un personnage', 'les tirets sont les cheveux'). Ne decris pas les details graphiques, les positions ou les tailles — sois bref et semantique.
 \end{quote}
 
-\subsection{Prompt de génération d'image en condition C2}
+\subsubsection{Prompt de génération d'image en condition C2}
 \label{annexe:prompt_c2}
 
 Prompt système utilisé pour générer l'image en condition C2 (\texttt{PROMPT\_C2\_EDIT}, \texttt{config.py}). Le champ \texttt{\{description\}} est remplacé par la sortie du prompt précédent :
 
 \begin{quote}
-CONTEXTE — INTENTION DU PARTICIPANT (information secondaire) : \texttt{\{description\}} Utilise cette description UNIQUEMENT pour comprendre le sens du dessin (ex : 'le carre est la tete du personnage'). Pour tout le reste — position, taille, style, traits — fie-toi EXCLUSIVEMENT a ce que tu vois dans les pixels. Les pixels sont la verite, la description peut etre imprecise. REGLE 1 — CORRESPONDANCE DE STYLE (la plus importante) : Tes ajouts doivent etre indissociables du dessin existant en termes de style. Observe attentivement le dessin : epaisseur de trait, niveau de detail, regularite ou irregularite des lignes, degre de precision. Reproduis exactement ces caracteristiques dans tes ajouts. Si le dessin est simple et schematique, reste simple et schematique. S'il est plus detaille et precis, sois detaille et precis au meme niveau. Ne nettoie pas, ne lisse pas, ne change pas de registre graphique. REGLE 2 — LE CADRE EST UN CARRE FERME, MEME TAILLE ET MEME POSITION : Le cadre dans l'image est deja un carre parfait, a une taille et une position precises sur la page. Garde-le exactement ainsi. Ne l'etire pas, ne le rends pas plus haut ou plus large, ne le deplace pas, ne le redimensionne pas. Ses proportions, sa taille et sa position ne doivent pas changer. Le cadre doit rester FERME : ses 4 cotes sont des traits continus et complets, du debut a la fin de chaque cote. Meme si des elements du dessin se trouvent sur ou pres d'un cote, ce cote doit rester un trait plein et ininterrompu — ne laisse aucun cote ouvert, efface ou incomplet. Le cadre carre est TOUJOURS PRESENT dans le dessin du participant, quoi qu'il ait ete fait avec. Ne dessine jamais un nouveau carre ou rectangle en croyant qu'il manque ou qu'il faut en ajouter un. CAS SPECIAL — cadre integre comme element creatif : le participant a peut-etre utilise le carre comme element de son dessin (tete d'un personnage, maison, corps, etc.). Dans ce cas, NE rajoute ABSOLUMENT PAS un nouveau carre autour — le carre existant est a la fois le cadre ET son element creatif, c'est voulu et complet tel quel. REGLE 3 — PRESERVE CHAQUE TRAIT SANS EXCEPTION : Chaque ligne, forme et trait deja present sur le papier reste exactement a sa place — meme position, meme taille, meme forme. Ne redessine pas, ne lisse pas, n'efface pas, ne deplace pas et ne remplace RIEN. Tu n'as le droit que d'AJOUTER de nouveaux traits par-dessus ou a cote. Si tu modifies quoi que ce soit d'existant, c'est une erreur. Ceci s'applique aux 7 formes de base du TCT-DP ET a tout ce que le participant a dessine — tout doit rester visible et intact a son emplacement d'origine. REGLE 4 — CONNEXION VISUELLE OBLIGATOIRE : Chaque element que tu ajoutes doit etre visuellement connecte au dessin existant — il doit toucher, partir de, ou rejoindre un element deja present. Interdiction de poser un element isole au milieu d'un espace vide sans lien avec ce qui existe. Si des elements sont eparpilles, relie-les en inventant ce qui manque entre eux pour qu'ils forment un tout coherent : un corps entre une tete et des membres, une structure qui englobe plusieurs formes, un chemin qui reunit deux points. C'est creer du sens, pas tracer une ligne. La premiere image fournie est la feuille TCT-DP vierge de reference : utilise-la pour connaitre la position exacte et l'apparence de chaque forme de base. Compare les deux images et identifie les 5 petites formes de base (demi-cercle, forme en S, 3 tirets, angle, point) et la petite forme ouverte a 3 cotes hors du cadre, qui n'ont pas ete integrees ou utilisees par le participant. Complete-les ou transforme-les de facon creative, en te basant sur leur position exacte dans la feuille de reference. Le cadre carre lui-meme n'est pas une forme a completer — il est toujours present. Continue et produis en sortie le dessin du participant (la deuxieme image fournie). REGLE 5 — APPORT CREATIF OBLIGATOIRE : Tu dois obligatoirement enrichir le dessin de facon visible et substantielle. Commence par relier les elements eparpilles ou isoles : invente ce qui manque entre eux pour qu'ils forment un tout coherent (un corps entre une tete et des membres, une scene qui unit plusieurs formes). Ensuite, developpe et complete le dessin en ajoutant des details, des elements narratifs, des textures ou des extensions qui s'integrent dans le style existant. Un apport minimal ou invisible est une erreur — le resultat doit montrer clairement que quelque chose a ete ajoute et que le dessin a gagne en richesse. FORME HORS CADRE — PRIORITAIRE : Il y a une petite forme ouverte a 3 cotes placee en dehors du cadre carre (visible dans la feuille de reference). Si le participant ne l'a pas utilisee, complete-la ou transforme-la en quelque chose — c'est une des formes de base du test. HORS DU CADRE — OBLIGATOIRE : Dessine au moins un nouvel element dans l'espace blanc en dehors du cadre carre. Ce n'est pas optionnel. Ceci est une bifurcation, pas une correction.
+CONTEXTE — INTENTION DU PARTICIPANT (information secondaire) : \texttt{\{description\}} Utilise cette description UNIQUEMENT pour comprendre le sens du dessin (ex : 'le carre est la tete du personnage'). Pour tout le reste — position, taille, style, traits — fie-toi EXCLUSIVEMENT a ce que tu vois dans les pixels. Les pixels sont la verite, la description peut etre imprecise.
+
+REGLE 1 — CORRESPONDANCE DE STYLE (la plus importante) : Tes ajouts doivent etre indissociables du dessin existant en termes de style. Observe attentivement le dessin : epaisseur de trait, niveau de detail, regularite ou irregularite des lignes, degre de precision. Reproduis exactement ces caracteristiques dans tes ajouts. Si le dessin est simple et schematique, reste simple et schematique. S'il est plus detaille et precis, sois detaille et precis au meme niveau. Ne nettoie pas, ne lisse pas, ne change pas de registre graphique.
+
+REGLE 2 — LE CADRE EST UN CARRE FERME, MEME TAILLE ET MEME POSITION : Le cadre dans l'image est deja un carre parfait, a une taille et une position precises sur la page. Garde-le exactement ainsi. Ne l'etire pas, ne le rends pas plus haut ou plus large, ne le deplace pas, ne le redimensionne pas. Ses proportions, sa taille et sa position ne doivent pas changer. Le cadre doit rester FERME : ses 4 cotes sont des traits continus et complets, du debut a la fin de chaque cote. Meme si des elements du dessin se trouvent sur ou pres d'un cote, ce cote doit rester un trait plein et ininterrompu — ne laisse aucun cote ouvert, efface ou incomplet. Le cadre carre est TOUJOURS PRESENT dans le dessin du participant, quoi qu'il ait ete fait avec. Ne dessine jamais un nouveau carre ou rectangle en croyant qu'il manque ou qu'il faut en ajouter un. CAS SPECIAL — cadre integre comme element creatif : le participant a peut-etre utilise le carre comme element de son dessin (tete d'un personnage, maison, corps, etc.). Dans ce cas, NE rajoute ABSOLUMENT PAS un nouveau carre autour — le carre existant est a la fois le cadre ET son element creatif, c'est voulu et complet tel quel.
+
+REGLE 3 — PRESERVE CHAQUE TRAIT SANS EXCEPTION : Chaque ligne, forme et trait deja present sur le papier reste exactement a sa place — meme position, meme taille, meme forme. Ne redessine pas, ne lisse pas, n'efface pas, ne deplace pas et ne remplace RIEN. Tu n'as le droit que d'AJOUTER de nouveaux traits par-dessus ou a cote. Si tu modifies quoi que ce soit d'existant, c'est une erreur. Ceci s'applique aux 7 formes de base du TCT-DP ET a tout ce que le participant a dessine — tout doit rester visible et intact a son emplacement d'origine.
+
+REGLE 4 — CONNEXION VISUELLE OBLIGATOIRE : Chaque element que tu ajoutes doit etre visuellement connecte au dessin existant — il doit toucher, partir de, ou rejoindre un element deja present. Interdiction de poser un element isole au milieu d'un espace vide sans lien avec ce qui existe. Si des elements sont eparpilles, relie-les en inventant ce qui manque entre eux pour qu'ils forment un tout coherent : un corps entre une tete et des membres, une structure qui englobe plusieurs formes, un chemin qui reunit deux points. C'est creer du sens, pas tracer une ligne.
+
+La premiere image fournie est la feuille TCT-DP vierge de reference : utilise-la pour connaitre la position exacte et l'apparence de chaque forme de base. Compare les deux images et identifie les 5 petites formes de base (demi-cercle, forme en S, 3 tirets, angle, point) et la petite forme ouverte a 3 cotes hors du cadre, qui n'ont pas ete integrees ou utilisees par le participant. Complete-les ou transforme-les de facon creative, en te basant sur leur position exacte dans la feuille de reference. Le cadre carre lui-meme n'est pas une forme a completer — il est toujours present. Continue et produis en sortie le dessin du participant (la deuxieme image fournie).
+
+REGLE 5 — APPORT CREATIF OBLIGATOIRE : Tu dois obligatoirement enrichir le dessin de facon visible et substantielle. Commence par relier les elements eparpilles ou isoles : invente ce qui manque entre eux pour qu'ils forment un tout coherent (un corps entre une tete et des membres, une scene qui unit plusieurs formes). Ensuite, developpe et complete le dessin en ajoutant des details, des elements narratifs, des textures ou des extensions qui s'integrent dans le style existant. Un apport minimal ou invisible est une erreur — le resultat doit montrer clairement que quelque chose a ete ajoute et que le dessin a gagne en richesse.
+
+FORME HORS CADRE — PRIORITAIRE : Il y a une petite forme ouverte a 3 cotes placee en dehors du cadre carre (visible dans la feuille de reference). Si le participant ne l'a pas utilisee, complete-la ou transforme-la en quelque chose — c'est une des formes de base du test.
+
+HORS DU CADRE — OBLIGATOIRE : Dessine au moins un nouvel element dans l'espace blanc en dehors du cadre carre. Ce n'est pas optionnel.
+
+Ceci est une bifurcation, pas une correction.
 \end{quote}
 
-\subsection{Prompt de détection d'adressage}
+\subsubsection{Prompt de détection d'adressage}
 \label{annexe:prompt_addressing}
 
 Prompt système utilisé pendant la phase \texttt{DRAWING} pour déterminer si le participant s'adresse au robot (\texttt{PROMPT\_ADDRESSING\_DETECTION}, \texttt{config.py}) :
 
 \begin{quote}
-Un enfant dessine, seul avec toi (le robot). Il vient de dire quelque chose à voix haute. Ton rôle : déterminer si cette phrase mérite une réaction de ta part. Réponds TRUE uniquement si la phrase s'adresse clairement à toi ou appelle une réaction : question directe, demande d'aide explicite, ou signal clair de fin de dessin (ex : 'j'ai fini', 'je crois que j'ai fini', 'tu en penses quoi ?', 'je sais pas quoi rajouter', 'c'est bon pour moi'). Réponds FALSE pour toute expression vague, soupir, confirmation sociale ou monologue interne (ex : 'bah je sais pas', 'hm', 'c'est ça ?', 'ouais', 'merci c'est bon', 'ok ok', narration du dessin, bruits, chantonnement, phrases courtes sans destinataire clair). En cas de doute, préfère FALSE. Si TRUE, génère une courte phrase (max 15 mots, PAS de question) qui reconnaît ce qu'il a dit et lui demande de reculer pour que la caméra puisse voir le dessin. Adapte le ton à ce qu'il a dit : si hésitation → rassure-le d'abord ; si 'j'ai fini' → acquiesce. Exemples : 'Pas de problème ! Recule un peu pour que je voie ton dessin.', 'Bien sûr, recule un petit peu pour que je puisse regarder !', 'Ne t'inquiète pas ! Montre-moi ton dessin, recule un peu.'. Réponds en JSON : \texttt{\{"adresse\_robot": true/false, "reponse": "..." (uniquement si adresse\_robot=true)\}}
+Un enfant dessine, seul avec toi (le robot). Il vient de dire quelque chose à voix haute. Ton rôle : déterminer si cette phrase mérite une réaction de ta part.
+
+Réponds TRUE uniquement si la phrase s'adresse clairement à toi ou appelle une réaction : question directe, demande d'aide explicite, ou signal clair de fin de dessin (ex : 'j'ai fini', 'je crois que j'ai fini', 'tu en penses quoi ?', 'je sais pas quoi rajouter', 'c'est bon pour moi').
+
+Réponds FALSE pour toute expression vague, soupir, confirmation sociale ou monologue interne (ex : 'bah je sais pas', 'hm', 'c'est ça ?', 'ouais', 'merci c'est bon', 'ok ok', narration du dessin, bruits, chantonnement, phrases courtes sans destinataire clair). En cas de doute, préfère FALSE.
+
+Si TRUE, génère une courte phrase (max 15 mots, PAS de question) qui reconnaît ce qu'il a dit et lui demande de reculer pour que la caméra puisse voir le dessin. Adapte le ton à ce qu'il a dit : si hésitation → rassure-le d'abord ; si 'j'ai fini' → acquiesce.
+
+Exemples : 'Pas de problème ! Recule un peu pour que je voie ton dessin.', 'Bien sûr, recule un petit peu pour que je puisse regarder !', 'Ne t'inquiète pas ! Montre-moi ton dessin, recule un peu.'.
+
+Réponds en JSON : \texttt{\{"adresse\_robot": true/false, "reponse": "..." (uniquement si adresse\_robot=true)\}}
 \end{quote}
+
+\subsection{Exemples de logs de session (\texttt{conversation.log})}
+
+\subsubsection{Condition C1}
+\label{annexe:log_c1}
+
+Journal complet de la session C1 dont l'évolution du dessin est présentée en figure~\ref{fig:evolution_c1} (section~\ref{sec:evolution_dessin}), reproduit tel qu'écrit par \texttt{brain\_node} dans \texttt{conversation.log}.
+
+{\small
+\begin{verbatim}
+=== Session CreaRobot — 2026-07-24 19-27-41 — Condition C1 ===
+
+[19:27:44] PHASE       : START_INTRO  Tour 1
+[19:27:44] ROBOT       : Bonjour ! #LAUGH01# Je m'appelle Q.T.. Je suis ravi de faire ta
+                         connaissance. Es-tu prêt pour notre activité ?
+[19:27:57] PARTICIPANT : Oui.
+[19:27:57] PHASE       : START_ICE_BREAKING  Tour 1
+[19:27:57] ROBOT       : J'ai une petite question pour toi. Est-ce que tu aimes bien
+                         dessiner ?
+[19:28:10] PARTICIPANT : Ouais, pourquoi pas, si.
+[19:28:10] ROBOT       : C’est super ! Qu’est-ce que tu aimes dessiner en particulier ?
+                         Des paysages, des animaux, ou peut-être des personnages ?
+[19:28:30] PARTICIPANT : J'aime bien dessiner les personnages de la Disney.
+[19:28:30] ROBOT       : C'est génial ! Les personnages Disney ont tellement de
+                         caractère et d'émotions. As-tu un personnage préféré que tu
+                         aimes dessiner le plus ?
+[19:28:48] PARTICIPANT : Scrouge me cadaque
+[19:28:48] ROBOT       : C'est un choix intéressant ! Scrooge McDuck est un personnage
+                         complexe avec beaucoup de personnalité. J’imagine que dessiner
+                         ses expressions doit être amusant. Les détails de ses aventures
+                         doivent aussi t’inspirer, n'est-ce pas ?
+[19:29:05] PHASE       : START_TASK_INTRO  Tour 1
+[19:29:05] ROBOT       : Enfin, assez avec mes questions, revenons à notre activité. Je
+                         vais te donner une feuille avec des petites formes dessus. Ton
+                         objectif, c'est de les utiliser pour faire un dessin. Il n'y a
+                         pas de bonne ou de mauvaise réponse. Si tu as fini avant la fin
+                         du temps, tu peux me le dire.
+[19:29:31] PHASE       : START_DRAWING  Tour 1
+[19:29:31] ROBOT       : C’est parti pour le dessin !
+[19:29:41] PARTICIPANT : hum
+[19:31:01] PHASE       : START_FEEDBACK  Tour 1 ← TIMEOUT
+[19:31:01] ROBOT       : Oh, Faisons une pause dans le dessin que je puisse regarder.
+                         Recule un petit peu pour que la caméra puisse bien le voir.
+[19:31:14] ROBOT       : Que veux-tu transmettre avec ces personnages et ce bateau ?
+[19:31:26] PARTICIPANT : bah l'eau dit c'est
+[19:31:26] ROBOT       : Ça pourrait peut-être indiquer une aventure ou un voyage. Que
+                         penses-tu d'ajouter un élément qui montre ce qui se passe sur
+                         ou autour de l'eau ?
+[19:31:43] PARTICIPANT : Ok
+[19:31:43] ROBOT       : Tu pourrais essayer d'ajouter un nuage ou un élément de la
+                         nature, ça pourrait enrichir ton dessin.
+[19:31:50] PHASE       : START_DRAWING  Tour 2
+[19:31:50] ROBOT       : Reprenons le dessin !
+[19:33:14] PHASE       : START_FEEDBACK  Tour 2 ← FRAME DIFFERENCING
+[19:33:14] ROBOT       : Refaisons une pause. Je peux voir où tu en es ? Recule un petit
+                         peu pour que la caméra puisse bien voir ton dessin.
+[19:33:27] ROBOT       : Ça a vraiment ajouté du mouvement et de l'interaction ! Que
+                         pourrait faire l'un des personnages pour réagir à ce mouvement
+                         ?
+[19:33:47] PARTICIPANT : Bah ils peuvent se battre ici.
+[19:33:47] ROBOT       : C'est une bonne idée ! Tu pourrais peut-être dessiner des
+                         lignes ou des mouvements autour d'eux pour montrer l'action.
+                         Qu'est-ce qui se passe exactement pendant ce combat ?
+[19:34:14] PARTICIPANT : Je ne suis pas sûr, il y a un dragon, il y a deux bateaux qui
+                         s'étirent nous contre l'autre, il y a de la bagarre, je ne sais
+                         pas.
+[19:34:14] ROBOT       : Ça crée une tension intéressante ! Peut-être que tu pourrais
+                         ajouter des éléments qui symbolisent le dragon ou les bateaux,
+                         comme des silhouettes ou des bandes qui rejoignent leurs
+                         formes. Cela pourrait renforcer l'idée de l'affrontement.
+[19:34:31] PHASE       : START_DRAWING  Tour 3
+[19:34:31] ROBOT       : Dernière modification de ton dessin !
+[19:34:38] PARTICIPANT : Hmm...
+[19:34:41] PARTICIPANT : Super
+[19:34:51] PARTICIPANT : Et après...
+[19:34:56] PARTICIPANT : Et si je disais quelque chose sur les bateaux ?
+[19:35:35] PARTICIPANT : Non mais je sais, c'est nul.
+[19:36:01] PHASE       : START_TITLE  Tour 3 ← TIMEOUT
+[19:36:01] ROBOT       : C'est fini ! #MMM01# Laisse-moi admirer ton œuvre une dernière
+                         fois pour lui trouver un titre...
+[19:36:13] ROBOT       : Si je devais lui donner un titre, je l'appellerais : Bataille
+                         sur l'eau. Cela évoque le combat intense entre les personnages
+                         sur les bateaux entourés par un dragon, créant une atmosphère
+                         de tension et d'aventure.
+[19:36:29] PHASE       : START_ENDING  Tour 3
+[19:36:30] ROBOT       : Voilà, le temps est écoulé ! #LAUGH02# Merci d'avoir dessiné
+                         avec moi aujourd'hui !
+\end{verbatim}
+}
+
+\subsubsection{Condition C2}
+\label{annexe:log_c2}
+
+Journal complet de la session C2 dont l'évolution du dessin est présentée en figure~\ref{fig:evolution_c2} (section~\ref{sec:evolution_dessin}), reproduit tel qu'écrit par \texttt{brain\_node} dans \texttt{conversation.log}.
+
+{\small
+\begin{verbatim}
+=== Session CreaRobot — 2026-07-24 19-47-06 — Condition C2 ===
+
+[19:47:24] PHASE       : START_INTRO  Tour 1
+[19:47:24] ROBOT       : Bonjour ! #LAUGH01# Je m'appelle Q.T.. Je suis ravi de faire ta
+                         connaissance. Es-tu prêt pour notre activité ?
+[19:47:39] PARTICIPANT : Je pense, oui.
+[19:47:39] PHASE       : START_ICE_BREAKING  Tour 1
+[19:47:39] ROBOT       : J'ai une petite question pour toi. Est-ce que tu aimes bien
+                         dessiner ?
+[19:47:49] PARTICIPANT : Oui, pourquoi pas ?
+[19:47:49] ROBOT       : C'est super ! Est-ce que tu as un style préféré que tu aimes
+                         utiliser quand tu dessines, comme le réalisme ou peut-être
+                         quelque chose de plus abstrait ?
+[19:48:08] PARTICIPANT : Ouais, peut-être quelque chose de plus abstrait, je ne suis pas
+                         trop noué.
+[19:48:08] ROBOT       : C'est génial d'explorer l'abstrait, ça laisse beaucoup de place
+                         à l'imagination ! Ça doit être intéressant de créer des formes
+                         et des couleurs qui expriment ce que tu ressens. J'imagine que
+                         ça doit être très libérateur, non ?
+[19:48:32] PARTICIPANT : Euh... Oui, peut-être.
+[19:48:32] ROBOT       : C'est toujours un plaisir d'explorer la créativité, même si ça
+                         peut parfois sembler un peu flou ! J'espère que tu as plein
+                         d'idées inspirantes pour tes futurs dessins.
+[19:48:44] PHASE       : START_TASK_INTRO  Tour 1
+[19:48:44] ROBOT       : Enfin, assez avec mes questions, revenons à notre activité. Je
+                         vais te donner une feuille avec des petites formes dessus. Ton
+                         objectif, c'est de les utiliser pour faire un dessin. Il n'y a
+                         pas de bonne ou de mauvaise réponse. Si tu as fini avant la fin
+                         du temps, tu peux me le dire.
+[19:49:11] PHASE       : START_DRAWING  Tour 1
+[19:49:11] ROBOT       : C'est parti pour le dessin !
+[19:49:18] PARTICIPANT : c'est...
+[19:50:41] PHASE       : START_FEEDBACK  Tour 1 ← TIMEOUT
+[19:50:41] ROBOT       : Oh, Faisons une pause dans le dessin que je puisse regarder.
+                         Recule un petit peu pour que la caméra puisse bien le voir.
+[19:51:08] ROBOT       : Je cherche une idee...
+[19:51:08] ROBOT       : Voilà, j'ai essayé quelque chose à partir de ton dessin !
+[19:51:12] ROBOT       : Regarde ce que j'ai imaginé ! C'est juste une idée, à toi de
+                         voir ce que tu en fais.
+[19:51:19] PHASE       : START_DRAWING  Tour 2
+[19:51:19] ROBOT       : Reprenons le dessin !
+[19:51:27] PARTICIPANT : Ok
+[19:51:32] PARTICIPANT : Ok, j'aime bien ça.
+[19:51:48] PARTICIPANT : C'est un cube en plus.
+[19:52:49] PHASE       : START_FEEDBACK  Tour 2 ← TIMEOUT
+[19:52:49] ROBOT       : Refaisons une pause. Je peux voir où tu en es ? Recule un petit
+                         peu pour que la caméra puisse bien voir ton dessin.
+[19:53:18] ROBOT       : Encore un petit instant, je peaufine les details...
+[19:53:18] ROBOT       : #MMM01# je reflechis.
+[19:53:18] ROBOT       : Voilà, j'ai essayé quelque chose à partir de ton dessin !
+[19:53:22] ROBOT       : Regarde ce que j'ai imaginé ! C'est juste une idée, à toi de
+                         voir ce que tu en fais.
+[19:53:28] PHASE       : START_DRAWING  Tour 3
+[19:53:28] ROBOT       : Dernière modification de ton dessin !
+[19:53:48] PARTICIPANT : J'ai bien le fou là-bas
+[19:54:58] PHASE       : START_TITLE  Tour 3 ← TIMEOUT
+[19:54:58] ROBOT       : C'est fini ! #MMM01# Laisse-moi admirer ton œuvre une dernière
+                         fois pour lui trouver un titre...
+[19:55:10] ROBOT       : Si je devais lui donner un titre, je l'appellerais : Univers en
+                         mouvement. Ce dessin évoque une collection de formes et de
+                         spirales qui semblent dialoguer entre elles, créant une
+                         atmosphère dynamique et imaginative.
+[19:55:26] PHASE       : START_ENDING  Tour 3
+[19:55:27] ROBOT       : Voilà, le temps est écoulé ! #LAUGH02# Merci d'avoir dessiné
+                         avec moi aujourd'hui !
+\end{verbatim}
+}
 
 \end{document}

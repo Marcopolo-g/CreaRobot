@@ -108,7 +108,7 @@ y_p    = y_bar + gap
 y_info = y_bar + gap * 3
 
 ax.plot([0, 1], [y_bar, y_bar], color="#444", linewidth=1.2)
-ax.text(0.5, y_p,    f"p = {p:.6f} {sig}", ha="center", fontsize=9)
+ax.text(0.5, y_p,    f"p < 0,0001", ha="center", fontsize=9)
 ax.text(0.5, y_info,
         f"Δ = {diff:.3f}  |  IC 95% [{ic_bas:.3f} ; {ic_haut:.3f}]  |  d = {d:.3f}",
         ha="center", fontsize=9, color="#333")
